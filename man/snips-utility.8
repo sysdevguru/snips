@@ -1,0 +1,75 @@
+.\"$Header: /home/cvsroot/snips/man/snips-utility.8,v 1.1 2001/08/01 22:47:54 vikas Exp $"
+.\"
+.TH SNIPS-UTILITY 8 "June 2001"
+.SH NAME
+snips-utility \- Miscellaneous SNIPS utility programs.
+.SH DESCRIPTION
+.LP
+There are a number of utility programs for SNIPS. These are described
+below:
+.TP
+.B keepalive_monitors.pl
+This is a simple perl script which makes sure that the various snips
+monitors are running and if not, restarts them. Edit the script and
+configure the various variables like who gets email when a monitor
+is restarted, which host should run which monitor, etc.
+.TP
+.B notifier.pl
+This reads the
+.I notifier-confg
+configuration file. It should be run from crontab every minute or more, and also from 
+.I snipslogd
+(using snipslog.conf).
+It also reads the
+.I updates
+files maintained by snipsweb to see which devices should be hidden or ignored.
+It can page, mail, or run any program that is desired using some simple
+modifications.
+.TP
+.B display_snips_datafile
+This program can be used to display a SNIPS format data file which is specified
+on the command line. Use the
+.I \-a
+option to display the data in an alternate output format.
+.TP
+.B logmaint.pl
+This script runs
+.logstats.pl and then rotates old log files and compresses them.
+them.
+.TP
+.B logstats.pl
+This program generates reports from the log files created by
+.IR snipslogd (8).
+(it is run from logmaint.pl and need not be run standalone).
+For each device, it lists the number of times that the device changed severity,
+the average time it was down each time, and the total time it was down and
+other similar statistics. The desired severity level can be specified on the
+command line (only severity changes above or below the specified level will
+be used in the calculations).
+.TP
+.B eventselect
+This utility reads in all the SNIPS datafiles listed on the command line and
+prints out all the events that match the
+.I sender, devicename, severity, from-time and to-time
+indicated on the command line. Multiple  device and sender names can be
+specified. The time values can also be specified as incremental values
+(seconds from the current time).
+.LP
+The output of eventselect is text strings in the SNIPS log format. The
+program is useful for selecting events and paging or notifying users based on 
+the severity, etc.
+Optionally, the events can be sent to the snipslogd daemon (in case the
+snipslogd daemon starts up later and we need to log existing state of the
+events to the logging daemon). e.g.
+.RS
+eventselect \-s ippingmon \-s portmon \-S gateway.abc \-S fileserver
+\-v Error -f 'Jun 2 08:00' -t +3600
+.RE
+.\"------------------------------------
+.SH AUTHOR
+.nf
+Misc contributors (listed in source files)
+.fi
+
+
+

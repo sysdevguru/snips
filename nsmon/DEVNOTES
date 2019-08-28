@@ -1,0 +1,4 @@
+			 DEV NOTES FOR nsmon
+
+1. The domain name being monitored is prefixed in the device name field.
+	DOMAIN + DEVICE_NAME

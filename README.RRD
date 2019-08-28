@@ -1,0 +1,35 @@
+The RRD Graphing software is available from:
+
+	http://www.caida.org
+    or	http://ee-staff.ethz.ch/~oetiker/webtools/rrdtool/
+
+Each monitor generates its RRD data file, which is then graphed using
+rrdgraph.cgi
+
+Since it is difficult to track the name of the variable in the RRD
+database, the device name and the variable name are stored in the RRD
+file path.
+
+	RRD_DIR/<hostname>/<varname>.rrd
+
+The downside to this is that the 'monitor' and the 'address' are not
+stored anywhere. and also if the hostnames are not unique, then two
+different monitors or devices will end up in the same rrd file. Also,
+since the hostnames get truncated to 16 characters the possibility
+of identical hostnames also exists. The error that we get from RRD
+will be:
+
+   ERROR: rrd_update() - illegal attempt to update using time xxxxx
+   	when last update time is xxxxxx (minimum 1 second step)
+
+To enable RRD for each monitor, set RRDTOOL ON  in the config file.
+
+There is no RRD function in trapmon, syslogmon
+
+Impact on Performance:
+
+	ippingmon on P-166, Linux for 986 hosts = 
+		260 secs with NO RRD
+		325 secs with RRD
+
+	-vikas

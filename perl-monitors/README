@@ -1,0 +1,119 @@
+## $Header: /home/cvsroot/snips/perl-monitors/README,v 1.0 2001/07/09 04:33:20 vikas Exp $
+##
+## Perlsnips README
+#
+## A few perl routines that can be used with Snips.
+#
+apcmon		- APC SmartUPS monitor (also see upsmon)
+armon		- appletalk route monitor (requires Cisco router & rcisco)
+bgpmon		- check if any BGP peers down/idle on a cisco router
+bpmon		- bootp monitor (requires bootpquery program)
+hostmon		- client/server system for monitoring Unix system performance
+mailmon		- monitor sendmail queue lengths
+mkarmon		- program to build armon configuration lines
+modemmon	- cisco terminal server modem line usage monitor
+novellmon	- IPX service monitor (requires Cisco router & rcisco)
+nrmon		- Novell route monitor (like armon)
+mknrmon		- program to build nrmon config file for Novell routes
+smbmon		- monitor SMB routes (set location of nmblookup)
+upsmon		- monitor UPS
+rcisco		- telnet to a Cisco and run a command (requires sockets.ph)
+		  Alternately, you can use tcpf.c
+snmpmon		- Monitor various SNMP variables from routers/RMON/etc.
+snmpgeneric	- Alternative to snmpmon. Monitor SNMP variables directly
+
+For programs that log onto the cisco router and parse the output, you
+need to code your router's  password into the 'rcisco' perl script
+which introduces a security risk (this is for 'rcisco' to log into
+your cisco). (An alternate to rcisco is the 'tcpf' C program).
+
+In v11.1 of Cisco software, you can actually use 'rsh' to execute
+commands on the Cisco. In the Cisco config, enter a command such
+as:
+
+	ip rcmd rsh-enable
+	ip rcmd remote-host snips  <this-host-ip> snips enable
+
+These commands will permit user 'snips' on this Unix host to do an
+rsh to the remote Cisco and execute all show etc. commands there.
+
+Using the samples (mainly  armon/modemmon/novellmon) you can build
+new monitors in Perl fairly easily. Your monitor just needs to call
+the 'snipslib.pl'  module which has SNIPS utility routines.
+Also see the man page for 'perlsnips'.
+
+The original PERL interface to SNIPS was provided by John Wobus (9/21/93).
+This is now rewritten and directly interfaces with the C library.
+
+NOTES
+-----
+
+1. These monitors use the SNIPS.pm module, and so they need to know the
+   location of this module. All user settable variables are defined
+   in $etcdir/snipsperl.conf
+
+   Edit this file for all variable initializations such as:
+
+	$rcisco
+	$snmpwalk
+	$snmpquery
+
+2. 'hostmon-client' needs to be installed on all your Unix systems that
+   need to be monitored. Make sure you put the proper server hostname
+   in the '@permithosts' array.
+
+
+  apcmon:	Monitors UPS battery level and state (APC Smart UPS's)
+
+  armon:	This monitors AppleTalk routes from a cisco router.
+		Can be changed to use CAP's atlook instead (see notes
+		in the top of the file).
+
+  bgpmon:	Checks cisco routers to see if the various BGP peers
+		are in a connected state.
+
+  bpmon:	Checks bootp daemon on various systems.
+
+  hostmon:	For monitoring the health of your Unix systems (load, disks,
+		memory, process tables, etc.) Consists of a client program
+		that runs on all the remote machines and a server program
+		'hostmon' that connects to the clients and gathers/processes
+		data from the clients and writes into SNIPS.
+
+		Edit the '@permithosts' line in the 'hostmon-client'
+		program to control which hosts can have telnet access to
+		the hostmon client data.
+
+		Edit the 'ping' program location (preferably in snipslib.pl)
+		and check the syntax in hostmon depending on your OS.
+
+		Copy hostmon-osclient to all of the systems to be
+		monitored and run hostmon-osclient/hostmon-client there.
+
+  mailmon:	Checks for clogged mail queues using 'mailq'. Obsoleted
+		and functionality merged into 'hostmon'.
+
+  nrmon:	Monitors Novell routes from a cisco router (similar to
+		armon).
+
+  novellmon:	Monitors Novell *services* from a cisco router.
+
+  modemmon:	Checks number of modem lines used on a cisco terminal server
+		by doing a 'who' and counting number of users on tty
+		lines.
+
+  snmpmon:	Monitor SNMP stats on various devices such as:
+		   RMON, terminal-server lines, traffic load, etc.
+		The 'snmpmon' server program processes the data gathered
+		by the 'snmpmon-client' program and puts it into the SNIPS
+		format. The client requires the CMU-SNMP snmpwalk program 
+		(supplied with SNIPS).
+  snmpgeneric	An alternative to snmpmon + snmpmon-client. Monitors
+		snmp variables directly. Contributed elander@comstar.net
+
+
+	-Vikas Aggarwal
+	vikas@navya.com
+	===============
+
+

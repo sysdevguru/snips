@@ -1,0 +1,18 @@
+## Config file for rpcpingmon (health of your RPC portmapper)
+##
+# Can also mark a site as TEST
+# POLLINTERVAL is number of seconds between each poll cycle.
+##
+
+POLLINTERVAL  180
+
+# To enable RRDtool data collection
+RRDTOOL  ON
+
+
+# All Unix systems (can give the name instead of an IP address also).
+tigger   tigger.navya.com  TEST
+mickey	 128.11.50.143
+minnie	 128.12.50.141
+#
+# Non Unix hosts (like routers) should be in the ippingmon-confg file.

@@ -1,0 +1,22 @@
+# $Id: Makefile.mid,v 1.0 2001/07/08 22:57:44 vikas Exp $
+#
+# Makefile for rpcping
+#
+# 
+
+RPCLIB = @RPCLIB@
+
+PROGCDEFS =
+PROGLIBS  = $(RPCLIB) $(OS_LIBS)
+
+TARG =	rpcping
+OBJS = 	rpcping.o
+
+$(TARG):	$(OBJS) Makefile
+	$(CC) $(CFLAGS) $(OBJS) $(PROGLIBS) -o $(TARG)
+
+install:  installdir  $(TARG)
+	$(INSTALL) -c -m 751 $(TARG) $(BINDIR)/
+
+clean:
+	rm -f $(DIRT) $(TARG)

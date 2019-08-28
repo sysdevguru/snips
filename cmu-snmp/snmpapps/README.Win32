@@ -1,0 +1,40 @@
+
+----- Updated August 8th, 1998 -----
+
+This is a very basic port to win32 machines.
+
+These do not work:
+
+* snmpset
+* snmpdelta
+* snmptest
+* snmptrap2
+* snmptrapd
+
+I've only tested this with VC++ 5.0 under NT5.0.
+
+
+
+
+
+
+To use:
+
+* Decide on a src directory (IE: c:\src\cmu)
+
+* Build the CMU SNMP library in the snmp subdir of your srcdir, per
+  the instructions provided with it.
+
+* Unpack the snmpapps collection into a subdir of your src directory
+  called "snmpapps". (IE: c:\src\cmu\snmpapps)
+
+* Open the file "cmusnmp.dsw" from the top src directory (IE:
+  c:\src\cmu\snmpapps).
+
+
+
+
+
+Ryan Troll
+Network Development
+Carnegie Mellon University

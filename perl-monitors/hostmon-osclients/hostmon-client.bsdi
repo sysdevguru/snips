@@ -1,0 +1,354 @@
+#!/usr/local/bin/perl
+
+#           ########  hostmon-client.bsdi #######
+#
+## $Header: /home/cvsroot/snips/perl-monitors/hostmon-osclients/hostmon-client.bsdi,v 1.1 2001/07/14 22:24:14 vikas Exp $
+#
+# This file is appended by 'hostmon-client'
+#
+
+###
+# All the following functions must print out the following:
+#   		VARIABLE VALUE UNITS COMMENT
+# For variables that are part of a varying maximum, normalize it and give
+# the percentage instead (e.g. free memory, etc.)
+###
+###
+
+## This file is for FreeBSD, BSDI, NetBSD
+use strict;
+use vars qw($debug $ostype $onfscalls $onfsretries $otimeo);
+
+# To make sure that df, etc. print out the values in 1K blocksize....
+
+$ENV{'BLOCKSIZE'} = "1024" ;
+$ostype = `uname -s -r -m` ;
+chomp $ostype;
+
+### csh% uptime
+# bsdi% uptime
+# 1:14AM  up 9 days, 14:53, 2 users, load averages: 2.11, 2.12, 2.13
+###
+sub uptime {
+  my $cmd = "uptime";
+  my $value = -1 ;
+  my $uptime = 0;    
+  open (CMD, "$cmd |");
+  while (<CMD>) {
+    $debug &&  print STDERR "(debug)uptime: $_" ;
+    chomp;
+    
+    if ( /^.*up\s+(\d+)\s+day.*,\s*(\d+):(\d+),.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ ) {
+      $uptime = ($1 * 1440) + ($2 * 60) + $3;
+      printf "Uptime %d mins\n", $uptime;
+      printf "Load5 %d load-5min\n", int($5) ;
+      last ;
+    }
+    elsif ( /^.*up\s+(\d+):(\d+),.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ ) {
+      $uptime = ($1 * 60) + $2;
+      printf "Uptime %d mins\n", $uptime;
+      printf "Load5 %d load-5min\n", int($4) ;
+      last ;
+    }
+    elsif ( /^.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ ) {
+      printf "Load5 %d load-5min\n", int($2) ;
+      last ;
+    }
+    else { print STDERR "(debug)uptime() : command format not understood.\n"; }
+  }	
+  close (CMD);
+  
+  #    print "Load 9999 load UnParseableInput\n";
+}
+
+### sunos4% pstat -T
+#	367/1017 files
+#	298/693 inodes
+#	97/266 processes
+#	53924/154220 swap
+# BSDI replaces the inodes by a dynamic vnode table and doesn't have a process
+# table.
+#
+# freebsd% pstat -T                       bsdi% pstat -T
+# 135/360 files                            384/650 files
+#    1935 vnodes                               556 vnodes
+# 10M/63M swap space                       0/49148 swap space (1K-blocks)
+#
+sub pstat {
+  
+  # Skip for BSDI version 1.0
+  if ($ostype =~ /BSDI.*1\.0/) { return; } # older BSDI versions
+  
+  open (CMD, "pstat -T |");
+  while (<CMD>) {
+    if ($debug) {print STDERR "(debug)pstat: $_" ; }
+    
+    chomp;
+    
+    if ( /^\s*(\d+)\/(\d+)\s*(files).*$/ ) {
+      printf "FileTable %d %%used\n", int($1 * 100 / $2);}
+    elsif ( /^\s*(\d+)M\/(\d+)M\s+(swap).*$/ ) {
+      printf "SwapSpace %d MBytes\n", $2 - $1;}
+    elsif ( /^\s*(\d+)\/(\d+)\s+(swap).*$/ ) {
+      printf "SwapSpace %d MBytes\n", int( ($2 - $1)/1024 ) ;}
+    
+    next;
+  }	
+  close (CMD);
+
+}  # end &pstat()
+
+### nfsstat
+# Have to calculate deltas in each pass since the nfsstat command does not
+# give us 'rate' over a time period.  
+# STORE THE OLD VALUES IN EACH PASS AND CALC DELTA EACH TIME.
+#
+# DWN: Additionally, nfsstat on BSDI does not yet give the ability to
+# restrict the output to client/server or RPC/NFS, so we have to look
+# at the header lines.
+#
+# Timeouts are not the same as retries!  Timeouts to reflect problems 
+# communicating to the server (nfs server not responding), which in turn
+# is indicated by successive retries on a NFS request.  The cause for the
+# retry may be local socket blockage, network loss, or a busy server.
+#
+# sunos4-vikas> nfsstat -rc
+#
+# Client rpc:
+# calls    badcalls retrans  badxid   timeout  wait     newcred  timers
+# 7915078  52102    0        345      52073    0        0        7164     
+#
+# bsdi% nfsstat
+#  Client Info:
+#  Rpc Counts:
+#   Getattr   Setattr    Lookup  Readlink    Read     Write    Create    Remove
+#         0         0         0         0       0         0         0         0
+#    Rename      Link   Symlink     Mkdir   Rmdir   Readdir    Statfs  RdirLook
+#         0         0         0         0       0         0         0         0
+#    GLease    Vacate     Evict
+#         0         0         0
+# Rpc Info:
+#  TimedOut   Invalid X Replies   Retries  Requests
+#        0         0         0         0         0
+#
+sub nfsstat {
+  my $cmd = "nfsstat";
+  my ($dcalls, $dtimeo, $dretries, $tvalue, $rvalue);
+  open (CMD, "$cmd |");
+  while (<CMD>) {
+    chomp;
+				# rate =  timeout/calls
+    next until (/TimedOut/) ;
+    if ( /^\s*(\d+)\s+\d+\s+\d+\s+(\d+)\s+(\d+)\s*$/ )  {
+      $debug && print STDERR "(debug)nfsstat: $_\n" ;
+      
+      $dcalls = $3 - $onfscalls ; $onfscalls = $3 ;
+      $dretries = $2 - $onfsretries; $onfsretries = $2;
+      $dtimeo = $1 - $otimeo ; $otimeo = $1 ;
+      last ;			# no more lines
+    }
+  }				# end (while)
+  close (CMD);
+  
+  if ($dcalls == 0) { $tvalue = 0 ; $rvalue = 0;}
+  else {
+    $tvalue = int($dtimeo * 100 / $dcalls);	# calc timeout rate
+    $rvalue = int($dretries * 100 / $dcalls);	# calc retry rate
+  }
+  
+  if ($debug) { print STDERR "(debug)nfsstat: $dtimeo/$dcalls\n" ;}
+  print "NFStimeouts $tvalue %timeouts\n";
+  print "NFSretries $rvalue %retries\n";
+
+}	# end &nfsstat()
+
+## df
+# Extract space availability stats. Printing out available MBytes and
+# percent full (together they make sense).
+# Note that this command prints out a number of lines with same variable
+# name (one for each disk). The hostmon server picks out the worst of
+# these lines.
+#
+# sun41-vikas> df -t 4.2
+#   Filesystem            kbytes    used   avail capacity  Mounted on
+#   /dev/sd0a              24239   12492    9324    57%    /
+#   /dev/sd0g             191919  149692   23036    87%    /usr
+#   /dev/sd3c            1230152 1062490   44647    96%    /usr/local
+#
+# bsdi-vikas> df -i -k -t local
+#   Filesystem  1K-blocks  Used  Avail Capacity iused ifree %iused Mounted on
+#    /dev/sd0a     7979    5877    1304    82%     631  3207  16%   /
+#    flsvr:/vol/cvs 953478  699853  158277 82%       0    0   100%  /vol/cvs
+#
+sub df {
+  
+  open (CMD, "df -i -t nonfs|");
+  
+  while (<CMD>) {
+    chomp;
+    if (/^\s*Filesystem/)  { next; } # ignore header line
+    if (/^\s*\S+:\/\S*/) { next; } # ignore NFS mounts
+    
+    if (/^\s*(\/dev\/.*|mfs:\d+)\s+\d+\s+\d+\s+(\d+)\s+(\d+)%\s+(\d+)\s+(\d+)\s+(\d+)%\s+(\/\S*)\s*$/)
+    {
+      $debug && print STDERR "(debug)df: $_\n" ;
+      
+      printf "DFspace_avail %d MB $7\n", int($2/1024);
+      print  "DFspace_\%used $3 \%full $7\n";
+      print  "DFinodes_avail $5 inodes $7\n";
+      print  "DFinodes_\%used $6 \%inodes $7\n";
+    }
+  }
+  close (CMD);
+  return ;
+
+}	# end &df()
+
+##
+# bsdi$ iostat -w 5 -c 3
+#          tty          sd0          sd1         cpu
+#   tin   tout sps tps msps sps tps msps us ni sy id
+#     0      4   3   0  9.5   0   0  0.0  5  0  1 94
+#    10     10   0   0  0.0   0   0  0.0  0  0  1 99
+#
+#           sps     sectors transferred per second (512 bytes ?)
+#           tps     transfers per second
+#           msps    milliseconds per average seek (including implied seeks)
+##
+sub iostat {
+  my $cmd = "iostat";
+  my ($str, $diskno, $numdisks);
+  my @IOname;
+  
+  open (CMD, "$cmd -w 5 -c 3 |");
+  
+  while (<CMD>) {
+    chomp;
+    $str = $_ ;
+    if (/\s+msps|tps\s+/) { next; } # ignore header line
+    if (/^\s+[A-z]+/) {		# header line containing disk names...
+      if ($debug)  { print STDERR "(debug)iostat: $_\n"; }
+      $numdisks = 0;
+      while ( $str =~ /\s*(\w+)\s+/ ) {
+	if ( $1 eq 'tty' ) { $str = $'; next; }	# BSDI lists 'tty'
+	if ( $1 eq 'cpu' ) { $str = $'; last; }	# 'cpu' is not a disk 
+	$str = $' ;		# remaining string
+	$IOname[++$numdisks] = $1; # extract the name of disk
+      }				# end while()
+    }
+    
+  }				# end: while(<CMD>)
+  close (CMD);
+  
+  # Here we have the last line from the command above
+  if ($debug)  { print STDERR "(debug)iostat: $str\n"; }
+  $diskno = 0;
+  while ($str =~ /\s*(\d+)\s+(\d+)\s+(\d+\.\d+)/) # extract bps,tps,msps
+  {
+    ++$diskno; $str = $' ;	# remaining string
+    printf "IObps %d kbps $IOname[$diskno]\n", int($1/2); # sectors ->kB
+    print "IOtps $2 tps $IOname[$diskno]\n"; # IO transfers per sec
+    print "IOmsps $3 msps $IOname[$diskno]\n"; # seek time, msecs/seek
+  }
+  
+}				# end &iostat()
+
+
+##        vmstat
+# Extract paging, real-memory, cache hits, CPU load, Context switches.
+# Note: Seems like the fields are fixed length, and sometimes there are
+#       no spaces between the output fields.
+# bsdi$ vmstat -w 5 -c 2
+#    procs   memory     page                    disks     faults      cpu
+#    r b w   avm   fre  flt  re  pi  po  fr  sr sd0 sd1   in   sy  cs us sy id
+#    2 0 0     0   456    3   0   0   0   0   0   0   0  119   23   9  5  1 94
+#    0 0 0     0   368  150  22   0   0   0   0   2   0  132  141  21  2  7 91
+#
+##    -1-      2     3    4   5   6   7   8   9   -10-    11   12  13 14 15 16
+#
+## 
+sub vmstat {
+  my $i = 0;
+  my $dline;
+  my $cmd = "vmstat";
+  
+  open(CMD, "$cmd -w 5 -c 2 |");
+  
+  while (<CMD>) { $dline = $_; next; }
+  
+  # Here we have the last data line from the command above.
+  if ($debug)  { print STDERR "(debug)vmstat: $dline"; }
+  $_ = $dline ;
+  chomp;
+  
+  # if any CPU time is 100, vmstat doesnt have any spaces in it.
+  # s/100(\s+\d+){0,2}\s*$/ 100\1/;
+  
+  ###   procs   #  avm  #  fre  #  flt   # re  #   pi  #   po  # disks #    cs   #   us  #  sy  #  id   ######
+  if (/^(\s*\d+){3}\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)(\s+\d+)+\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$/)  {
+    printf "MemFree %d MB\n", int($3 / 1024); # convert KB to MB
+    print "PageFlt $4 pgflts\n";
+    print "PageRe $5 pages/sec\n";
+    print "PageIn $6 pi\n";
+    print "PageOut $7 po\n";
+    print "CtxtSw $9 rate\n";
+    print "CPUus $10 %user\n";
+    print "CPUsy $11 %system\n";
+    print "CPUidle $12 %idle\n";
+  }
+  close (CMD);
+  
+}				# end &vmstat()
+
+
+##       netstat
+# Extract collision and error rates. Luckily, on SunOS there is an option
+# for printing out the delta values. Since there is no easy way to 
+# terminate the command after displaying 5 lines, forcibly close the
+# command stream.
+# Ignore the first few lines, look at the 5th and then forcibly close.
+# Since the command only displays one interface's data, we look at the
+# 'totals' field.
+#
+## NOTE: BSDI 1.0 does not seem to have a working '-w' argument, but works with
+## the numeric argument implying the '-w'.
+#
+#  FreeBSD> netstat 5
+#     input   (ed0)   output                 input  (Total)  output
+# packets  errs  packets  errs colls   packets  errs  packets  errs colls
+#   <first line with total values, ignore>
+#       6     0        5     0     0         6     0        5     0     0
+#       5     0        4     0     0         5     0        4     0     0
+# 
+sub netstat {
+  my $i = 0;
+  my $cmd = "netstat";
+  
+  my $pid = open (CMD, "$cmd 10 |"); # 10 second sampling
+  while (<CMD>) {
+    if (/^\s+[A-z]+/) { next; }	# ignore header lines if any
+    if (++$i < 3)  { next ;}	# ignore first 3 lines
+    chomp;
+    $debug && print STDERR "(debug)netstat: $_\n" ;
+    
+    if (/^\s*\d+(\s+\d+)*\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$/)
+    {
+      my ($ipkts, $opkts) = ($2, $4);
+      
+      if ($ipkts == 0) { $ipkts = 1; } # avoid division by zero
+      if ($opkts == 0) { $opkts = 1; }
+      printf "NetIErr %d PktRate\n", int ($3 * 100 / $ipkts);
+      printf "NetOErr %d PktRate\n", int ($5 * 100 / $opkts);
+      printf "NetColl %d PktRate\n", int ($6 * 100 / $opkts);
+    }
+    kill ('TERM', $pid) ; last ; # no more lines
+  }	
+  close (CMD);
+}				# end &netstat()
+
+# require this otherwise require &xxxx will issue an error saying true not
+# returned by xxxxx module.
+1;
+
+###############      END OF hostmon-client.bsdi      ####################
+

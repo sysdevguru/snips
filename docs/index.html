@@ -1,0 +1,160 @@
+<html>
+
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<meta http-equiv="Content-Language" content="en-us">
+<meta name="GENERATOR" content="Microsoft FrontPage 4.0">
+<meta name="ProgId" content="FrontPage.Editor.Document">
+<meta name="keywords" content="SNIPS, nocol, network operation center on-line,
+     NoCOL, SNIPS, snips, network monitoring, system monitoring, netconsole,
+     system and network monitoring, web monitoring, multiping, portmon, cisco, snmp, 
+     monitor, network, snmp, mrtg, nocol">
+<title>SNIPS- System and Network Polling Software</title>
+<style>
+<!--
+.noline      { text-decoration: none; color: #333300; font-size: 12px; font-weight: bold; 
+               font-family: Arial, Helvetica, sans-serif }
+.nolineblack { text-decoration: none; color: #000000; font-size: 12px; font-weight: bold; 
+               font-family: Arial, Helvetica, sans-serif }
+.nolinegray  { text-decoration: none; color: #996699; font-size: 12px; font-weight: bold; 
+               font-family: Arial, Helvetica, sans-serif }
+.main        { font-family: Verdana, Geneva, Arial, Helvetica, Sans-Serif; font-size: 12px; 
+               line-height: 16px }
+.fixed       { font-family: 'Lucida Console', Courier; font-size: 12px; color: #000000 }
+body         { background-color: White; font-family: Arial, Helvetica, sans-serif; 
+               list-style-type: square }
+.caption     { font-family: Arial, Helvetica, Sans-Serif; font-size: 12px; letter-spacing: 
+               1pt; font-weight: bold }
+-->
+</style>
+</head>
+
+<body>
+
+<table border="0" cellpadding="6" cellspacing="0" width="700">
+  <tr>
+    <td colspan="5"><img border="0" src="images/snips.gif" width="700" height="46"></td>
+  </tr>
+  <tr>
+    <td></td>
+    <td></td>
+    <td nowrap><font size="4"><i>System &amp; Network Integrated Polling
+      Software</i></font></td>
+    <td></td>
+    <td></td>
+  </tr>
+  <tr>
+    <td valign="top" width="16%">
+      <table width="130" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+          <td bgcolor="#AAAA00" width="130" height="20"><img src="images/trans.gif" alt=" " width="130" height="15" /></td>
+        </tr>
+        <tr>
+          <td valign="top" bgcolor="#efefef" colspan="2">&nbsp;<a href="http://www.netplex-tech.com/software/snips/downloads/" class="noline">Download</a><center><img src="images/pixel.gif" width="120" height="1" border="0" hspace="0" vspace="1" alt=" " /></center>
+            &nbsp;<a href="install.txt" class="noline">Installation</a><center><img src="images/pixel.gif" width="120" height="1" border="0" hspace="0" vspace="1" alt=" " /></center>
+            &nbsp;<a href="opsguide.html" class="noline">Operations Guide</a><center><img src="images/pixel.gif" width="120" height="1" border="0" hspace="0" vspace="1" alt=" " /></center>
+            &nbsp;<a href="design.html" class="noline">Design &amp; Internals</a><center><img src="images/pixel.gif" width="120" height="1" border="0" hspace="0" vspace="1" alt=" " /></center>
+            &nbsp;<a href="release.html" class="noline">Release Notes</a><center><img src="images/pixel.gif" width="120" height="1" border="0" hspace="0" vspace="1" alt=" " /></center>
+            &nbsp;<a href="mail-archives" class="noline">Mail Archives</a><center><img src="images/pixel.gif" width="120" height="1" border="0" hspace="0" vspace="1" alt=" " /></center>
+            &nbsp;<a href="bugs.txt" class="noline">Known Bugs</a><center><img src="images/pixel.gif" width="120" height="1" border="0" hspace="0" vspace="1" alt=" " /></center>
+            &nbsp;<a href="copyright.txt" class="noline">Copyright</a><center><img src="images/pixel.gif" width="120" height="1" border="0" hspace="0" vspace="1" alt=" " /></center>
+            &nbsp;<a href="faq.html" class="noline">FAQ</a><center><img src="images/pixel.gif" width="120" height="1" border="0" hspace="0" vspace="1" alt=" " /></center><br />
+          </td>
+        </tr>
+      </table>
+      <p align="center"><img border="0" src="images/snips1.jpg" width="124" height="54"></p>
+    </td>
+    <td width="6%"></td>
+    <td valign="top" width="54%"><b>Current Version v1.1</b><font class="main">
+      <p>SNIPS is a <b>system and network monitoring software </b>that runs on
+      Unix systems and can monitor network and system devices. It is capable of
+      monitoring DNS, NTP, TCP or web ports, host performance, syslogs, radius
+      servers, BGP peers, etc. New monitors can be added easily (via a C or Perl
+      API).</p>
+      <p>False alarms are avoided by escalating events through severity levels-
+      hence if a site is unreachable, the site will be tested multiple times
+      before finally indicating that it is 'critical'. All events are logged,
+      and the operator has the capability to decide which level to view the
+      events at.</p>
+      <p><b>Available monitors are:</b></p>
+      <blockquote>
+        <table border="0" cellspacing="0" cellpadding="3" width="80%" bordercolor="#C0C0C0" class="main">
+          <tr>
+            <td>ICMP ping</td>
+            <td>RPC portmapper</td>
+          </tr>
+          <tr>
+            <td>OSI ping</td>
+            <td>Ethernet load</td>
+          </tr>
+          <tr>
+            <td>TCP ports</td>
+            <td>Nameserver</td>
+          </tr>
+          <tr>
+            <td>Radius server</td>
+            <td>Syslog messages</td>
+          </tr>
+          <tr>
+            <td>Mailq</td>
+            <td>NTP</td>
+          </tr>
+          <tr>
+            <td>UPS (APC) battery</td>
+            <td>Unix host performance</td>
+          </tr>
+          <tr>
+            <td>BGP peers</td>
+            <td>SNMP variables</td>
+          </tr>
+          <tr>
+            <td>Data throughput</td>
+            <td>&nbsp;</td>
+          </tr>
+        </table>
+      </blockquote>
+      <p>Click <a href="sample1/index.html">here</a> to see a sample of the web
+      interface.</p>
+      <p>The software is available from <a href="http://www.netplex-tech.com/software/snips/">http://www.netplex-tech.com/software/snips</a>
+      or via ftp from <a href="ftp://ftp.navya.com/pub/">ftp.navya.com.</a></p>
+      <p><b>snips-users@navya.com</b> is a mailing list for general discussion
+      of SNIPS. Click <a href="mailto:snips-users-request@navya.com">here </a>to
+      subscribe to this mailing list (send <font class="fixed">subscribe</font>
+      in the BODY of your email).</p>
+      <p>Send bug reports to <a href="mailto:snips-bugs@navya.com">snips-bugs@navya.com</a></p>
+      <p>For questions about Fidelia's <i>Assurance</i> performance monitoring
+      system, please click <a href="http://www.fidelia.com/solutions/nocol-faq.phtml"><b>here</b></a>.</p>
+      <hr width="50%" noshade align="center">
+      <p><i>The latest versions of these documents can be found <a href="http://www.netplex-tech.com/software/snips">online</a></i></font></td>
+    <td width="6%"></td>
+    <td valign="top" width="18%" bgcolor="#FFFFFF">
+      <p align="left"><a href="http://www.fidelia.com/solutions/nocol-faq.phtml"><img border="0" src="images/fidelia-logo.gif" width="150" height="82"></a><br>
+      &nbsp;<font class="caption">a SNIPS sponsor</font><br>
+      <table border="0" width="100%" cellspacing="0" cellpadding="1">
+       <tr>
+         <td bgcolor="#eeffcc"><font class="main"><i>Visit our web site
+	   for a commercially supported, highly scalable monitoring product!!</i></font></td>
+      </tr>
+     </table>
+     <br>
+     <br>
+     <br>
+     <br>
+     <br>
+     <br>
+     </p>
+     <p align="left"><a href="http://www.netplex-tech.com">
+     <img border="0" src="/images/ntlogo-small.jpg" width="115" height="130">
+     </a><br></p>
+    </td>
+  </tr>
+</table>
+<p><a href="index.html"><img src="images/homebtn.gif" border="0" alt="Home" align="middle" width="95" height="20"></a>
+<a href="ftp://ftp.navya.com/pub"><img src="images/downloadsbtn.gif" border="0" alt="Downloads" align="middle" width="95" height="20"></a>
+<a href="contactus.html"><img src="images/contactusbtn.gif" border="0" alt="Contact Us" align="middle" width="95" height="20"></a></p>
+<h5><font color="#666666">Copyright © 2001 Netplex Technologies Inc.<br>
+</font></h5>
+
+</body>
+
+</html>

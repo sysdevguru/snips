@@ -1,0 +1,101 @@
+# File:		snmpmon-confg
+#
+# 	Config file for SNMPMON
+#
+## Regular expressions must NOT HAVE ANY '|' marks in it (exclamation char)
+
+# Poll interval in seconds
+
+POLLINTERVAL	300
+RRDTOOL  ON
+
+## THRESHOLDS CAN BE IN INCREASING OR DECREASING ORDER
+##
+#  <variable>  <host regex>  wthres ethres cthres
+#
+# The host-regex  of '*' is automatically converted into '.+' by
+# snmpmon
+
+# Variable prefixes are:  SYS RMON RTR CISCO HOST
+
+## You can ignore specific events by not listing a 'default' matching
+#  rule for them.
+##
+## SYSTEM reboots. A single reboot might not make it upto critical level
+## but it will get logged. Multiple reboots means that the uptime will
+## be below the threshold for 2-3 consecutive cycles, and will make it
+## to the critical level. Increase these thresholds if you want to see
+## the reboots reach critical level.
+##
+SYS.sysUpTime	.+server	600 300 180
+
+
+##
+## RMON mib on ethernet interfaces
+##
+RMON.etherStatsPkts	*	100  300  500
+
+RMON.etherStatsBW	*	20   40   60	Net_1
+RMON.etherStatsBW	*	10   30   40
+
+# Collisions per second.
+RMON.etherStatsCollisions  *	100  200  300
+
+##
+## Router MIB variables
+##
+
+## Following variable just have values (not rates) (RTR = ROUTER)
+RTR.ifOutQLen	*	2 5 10
+CISCO.locIfReliab	*	240  225 200
+
+# following are in rate per second
+RTR.ifInUcastPkts	trillian	500 700 900	Ether.+
+RTR.ifInUcastPkts	*		400 500 600	Ether.+
+RTR.ifOutUcastPkts	*		500 700 900	Ether.+
+RTR.ifOutErrors		*		100 200 300
+RTR.ifInErrors		*		10  20  40
+
+# Bandwith used of each interface (extracted from octets/ifSpeed)
+RTR.ifInBW		*		10  50  70	Serial.+
+RTR.ifInBW		*		10  50  60
+RTR.ifOutBW		*		10  50  70
+
+# Following are in rate-per-minute
+CISCO.locIfResets	*	5    10  15
+CISCO.locIfInAbort	*	10   15  20
+CISCO.locIfCarTrans	*	1    2   3
+
+##
+## Terminal Server busy lines
+##
+CISCO.tsLineActive	cs500	 4   6   8
+CISCO.tsLineActive	sliphub  15  18  20
+
+##
+## Unix or NT hosts supporting RFC-1514 HostResources mib
+##
+HOST.uptime		*	600   300  120	
+HOST.cpuload		*	60   75  90
+HOST.phymem_%used	*	80   90   95
+HOST.virtual_%used	*	60   70   80
+HOST.proctable_%used	*	50   40   30
+HOST.diskspace_%used	*	75   85   95    ^/usr$
+HOST.diskspace_%used	*	60   70   80   ^/home$
+HOST.diskspace_%used	*	65   75   85
+
+############## START of DEVICE LIST ###############
+
+STARTDEVICES
+
+# DEVICE   cid   type [ type type ... ]
+##
+## Known types are:
+#	system rmon router cisco_router cisco_ts host
+
+ctron-res	public	system rmon 
+cs500		public	cisco_ts
+trillian	public	system router cisco_router
+
+fileserver1	public	host
+firewall	public	host

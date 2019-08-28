@@ -1,0 +1,35 @@
+# $Id: Makefile.mid,v 1.0 2001/07/09 03:09:32 vikas Exp $
+#
+# Makefile for 'snipslogd'
+#
+# 
+
+# ETCDIR is used for the config file.
+# PIDDIR is used for the error file.
+
+PROGCDEFS =	-DETCDIR=\"$(ETCDIR)\" -DPIDDIR=\"$(PIDDIR)\"
+PROGLIBS  =
+
+TARG =	snipslogd
+OBJS = 	snipslogd.o
+INITFILES = snipslogd
+
+$(TARG):	$(OBJS) Makefile
+	$(CC) $(CFLAGS) $(OBJS) $(LIBS) $(PROGLIBS) -o $(TARG)
+
+snipslogtest:  snipslogtest.o
+	$(CC) $(CFLAGS) -DTEST -o snipslogtest snipslogtest.c  $(LIBS)
+
+install:  installdir $(TARG)
+	$(INSTALL) $(INSTALLFLAGS) -c -m 751 $(TARG)  $(BINDIR)/
+	@echo "___Update config file for logging daemon in $(ETCDIR) ___"
+
+clean:
+	rm -f $(DIRT) stress_snipslogd newtest
+
+rcs:
+	@echo "Doing 'rcs' in $(TARG)"
+	@-for i in $(OBJS); do \
+		$(CO) -q `basename $$i .o`.c ;\
+	  done
+

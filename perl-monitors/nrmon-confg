@@ -1,0 +1,20 @@
+# Config for nrmon
+#
+#  A Cisco router from which to steal the info:
+#
+ROUTER = mycisco  myPasswd
+#
+# Syntax:
+#	<NETWORK>   <INTERFACE>   [NEXT-HOP]
+# where
+#	INTERFACE is specified as  s|e|F.  followed by a number
+#		S (serial),  E (ethernet),  F. (Fddi)
+
+# Directly-connected network:
+4D  e22
+
+# Route that is through another router:
+2E   e9   D2.aa00.0400.0118
+
+TEST = 3  s1  D2.aa00.0400.1234
+

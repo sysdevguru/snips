@@ -1,0 +1,6 @@
+* snmptrapd: syslog() traps
+* snmptrap2: Remove parse_text_oid()
+* snmpdelta: Actually document
+* snmpset:   Actually document
+
+* Generate HTML docs from manpage stubs

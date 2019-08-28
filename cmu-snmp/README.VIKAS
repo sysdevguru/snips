@@ -1,0 +1,30 @@
+This CMU SNMP software was FTPed from FTP.NET.CMU.EDU on Nov 06, 1999
+
+	LIB  = cmu-snmp-V1.14.tar.gz
+	APPS = cmu-snmpapps-V1.4.tar.gz
+
+The latest mib-v2.txt was FTPed from the CMU site and snmp/mib-v2.txt
+was deleted. THE other/hpnp.mib SECTION OF THE FILE WAS CAUSING PROBLEMS
+WITH QUERIES FOR mib-2.system.xx SO IT HAS BEEN COMMENTED OUT.
+
+NOTES
+------
+1. Looks for include files in 'snmp' subdir. So hard to compile the
+   apps without a full install.
+
+2. Build the library by
+
+	cd snmp
+	./configure --prefix=`pwd`/.. --with-gnu-ld --disable-shared
+	make all
+	make install
+
+3. The compile the snmpapps by:
+
+	./configure --prefix=`pwd`/.. --with-gnu-ld --disable-shared \
+	  --with-snmp=`pwd`/..
+	make
+
+4. Patched snmp/new-parse.c  (typecast strdup to char *)
+
+5. Patched snmp/Makefile.in to set MIBDIR=$MIBDIR and not MIBDIR=$ETCDIR

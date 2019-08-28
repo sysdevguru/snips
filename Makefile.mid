@@ -1,0 +1,146 @@
+# $Header: /home/cvsroot/snips/Makefile.mid,v 1.3 2001/09/24 19:27:47 vikas Exp $
+#
+# Makefile for 'snips'. This file simply calls on other Makefiles in
+# the subdirectories to do all the work. All the definitions are used
+# by the other Makefiles which then do all the compile time definitions.
+#
+# To 'make' for only one program, use 
+#	make "SRCS=trapmon" [install|clean]
+#
+REV = "1.2"
+package=@package@
+OS=@OS@
+WHOAMI=@WHOAMI@
+
+# Which programs are to be compiled and installed.
+#	snipslog	the snipslogd logging daemon
+#	nsmon		Nameserver monitor
+#	perl-monitors	Perl interface and associated monitors
+#	pingmon		Reachability monitors (ICMP, RPC, OSI)
+#	portmon		Check TCP ports on various machines.
+#	radiusmon	Check udp radius monitor
+#	snipstv	the snips display for all the monitored data
+#	tksnips		Tcl/Tk interface to snips events (needs ndaemon)
+#	tpmon		Data thruput monitor
+#	trapmon		SNMP trap monitor
+#	utility		Small utility programs
+#	man		Manual pages
+#
+SRCS =  lib utility snipslog nsmon ntpmon \
+	pingmon portmon radiusmon perl-monitors perl-module \
+	snipstv snipsweb tksnips tpmon trapmon \
+	pingmon/multiping pingmon/rpcping man
+
+##
+# This is the list of files that need to be 'tar-red'. Using the FF option
+# in the tar command and also excluding the RCS directories further down.
+DIST =	BUGS COPYRIGHT INSTALL README README.RRD README.NOCOL \
+	Makefile.dist Makefile.mid Makefile.head Makefile.tail Configure \
+	autoconf cmu-snmp include contrib docs snips.conf $(SRCS)
+
+##
+# Following files are excluded from the distribution
+NOTDIST = makefile local-stuff \
+	  cmu-snmp/bin cmu-snmp/lib cmu-snmp/man cmu-snmp/etc \
+	  CHECK DONE TODO
+
+all:	Init
+	 @echo "BUILDING SNIPS revision $(REV) for $(OS) $$OS" ;\
+	 for i in $(SRCS); do \
+	  if [ -d $$i ]; then \
+	    (echo "" ; echo "MAKING IN $$i" ; echo "----------" ; \
+	    cd $$i ; make $(MFLAGS) OS="$$OS" ;) \
+	  fi ;\
+	 done
+	@echo "" ; echo "Now run make install"
+
+Init:
+	@if [ "$(OS)" = "" ]; then \
+	    OS=`uname -s -r`; \
+	  else \
+	   if [ "$(OS)" != "`uname -s -r`" ]; then \
+	    echo "WARNING- MAKEFILES CONFIGURED FOR $(OS), NOT `uname -s -r`";\
+	   fi; \
+	 fi
+
+## Ultrix make balked at the tests for directories, hence the second test
+install:	installdir  lib
+	@[ -d $(ROOTDIR) ] && [ -d $(DATADIR) ] && [ -d $(BINDIR) ] && [ -d $(IRISETC) ]
+	@-(touch SniPpet ; $(INSTALL) $(INSTALLFLAGS) -c -m 750 SniPpet /tmp/;) >/dev/null 2>&1 ;
+	@(if [ -f /tmp/SniPpet ]; then rm -f SniPpet /tmp/SniPpet; else \
+	  echo "YOU HAVE AN INCOMPATIBLE install, use 'myinstall' instead" ;\
+	  echo "Else prefix your shell PATH with BSD style install" ;\
+	  rm -f  SniPpet /tmp/SniPpet ; exit 1 ; fi)
+
+	@echo make $(MFLAGS) install ;
+	@-for i in $(SRCS); do \
+	  ( echo "" ; echo "MAKING IN $$i" ; echo "----------" ; cd $$i ; \
+		make $(MFLAGS) install ; make $(MFLAGS) init ) ;\
+	done
+	@echo ""
+	@echo "Linking to iris config files under $(IRISETC)/snips..."
+	@rm -rf $(ROOTDIR)/etc
+	@ln -s $(IRISETC)/snips $(ROOTDIR)/etc
+	@echo "" ; echo "           NOW su AND DO A make root "
+
+
+## This should probably be in each individual sub-dirs makefile...
+root:
+	@if [ "`$(WHOAMI)`" = "root" ]; then \
+		echo "Installing the following programs SUID under $(BINDIR)";\
+		echo "  multiping  trapmon" ;\
+		$(INSTALL) -o root -g wheel -m 4711 -c pingmon/multiping/multiping $(BINDIR) ;\
+		$(INSTALL) -o root -g wheel -m 4710 -c trapmon/trapmon $(BINDIR) ;\
+	 else \
+		echo "PLEASE RUN  make root  AS root (currently `whoami`)" ;\
+	 fi
+
+tar:	snips.tar
+snips.tar:
+	@-rm -f snips-$(REV).tar.gz
+	@TEMPD=/var/tmp/t/snips-$(REV) ;\
+	 [ -d $$TEMPD ] || mkdir /var/tmp/t $$TEMPD ;\
+	 if [ ! -d $$TEMPD ]; then \
+	    echo "Fatal: cannot create directory  $$TEMPD";\
+		exit 1 ; \
+	 else \
+	   rm -f $$TEMPD/XCLUDEFILES;\
+	 fi ;\
+	 echo "Creating list of exclude files and directories" ;\
+	 for i in $(DIST) ; do \
+	  find $$i \( -name RCS -o -name CVS -o -name '*~' \) -print >>$$TEMPD/XCLUDEFILES;\
+	 done ;\
+	 for i in $(NOTDIST) ; do \
+		echo "$$i" >> $$TEMPD/XCLUDEFILES ;\
+	 done ;\
+	 echo "Copying src files to tmp location" ;\
+	 tar cfX - $$TEMPD/XCLUDEFILES $(DIST) | (cd $$TEMPD; tar xf -) ;\
+	 rm -f $$TEMPD/XCLUDEFILES ;\
+	 echo "Creating distribution tar file" ;\
+	 ( cd $$TEMPD/ ; \
+	   cp Makefile.dist Makefile ; rm -f Config.cache ;\
+	   cd .. ; tar cf - snips-$(REV) ) >snips-$(REV).tar;\
+	 ls -l snips-$(REV).tar
+	@rm -rf /var/tmp/t
+
+clean:
+	for i in $(SRCS); do \
+	  if [ -d $$i ]; then \
+		(cd $$i ; if [ -f Makefile ]; then make clean; \
+		 else make -f Makefile.mid clean ; fi ) ; \
+	  fi ;\
+	done
+
+# Cleanup everything ready to send out for distribution
+cleanall:  clean
+	rm -f Config.cache Makefile.bak */Makefile.bak
+	cp Makefile.dist Makefile
+	@-for i in */Makefile.mid */*/Makefile.mid; do \
+	  rm -f `echo $$i | sed 's/\.mid//'` ;\
+	 done
+
+rcs:
+	@-for i in $(SRCS); do \
+		(cd $$i ; make $(MFLAGS) rcs ; ) ;\
+	done 
+###

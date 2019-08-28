@@ -1,0 +1,14 @@
+CVS
+VERSION.old
+log.sun4_56
+log.hp700_ux90
+log.pmax_ul4
+log.sgi_62
+log.sun4_413
+log.sun4_55
+config.log
+config.cache
+Makefile
+config.status
+config.h
+core

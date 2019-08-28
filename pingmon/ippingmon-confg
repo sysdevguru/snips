@@ -1,0 +1,42 @@
+## Config file for ippingmon.
+##
+# ALL Unix hosts should be monitored using 'rpcpingmon'. Put them in
+# the 'rpcppingmon-confg' file and not here.
+# List all non-Unix hosts here (routers, etc.) that dont have a 'portmapper'
+# Can also mark a device as TEST
+
+## POLLINTERVAL is number of seconds between each poll cycle.
+POLLINTERVAL  300
+
+## To enable RRDtool data collection
+RRDTOOL  ON
+
+## Path to multiping or RPCping. This overrides the values defined
+#  at compile time.
+#PINGPATH	/usr/local/snips/bin/multiping
+
+## Size of each packet sent (in bytes)
+PACKETSIZE  100
+
+## Number of packets to send in ping command
+NPACKETS 5
+
+## Set the default warning, error and critical levels for PKTS RECEIVED back.
+#  Remember to set these based on NPACKETS value above.
+#  You can also set individual thresholds per host below.
+#	      WARN     ERROR   CRIT
+PKT_THRESHOLDS	3	2	1
+
+## Set the thresholds for Round trip times in millisecs
+RTT_THRESHOLDS	100	500	1500
+
+#
+# The thresholds below are for packets RECIEVED (not lost), followed by
+# RTT thresholds
+#
+##  snips name 	address/FQDN	warn   error   critical
+#  -----------  ------------	----   -----   --------
+isp1-gateway	gw1.abc.org
+marketing-lan	128.1.2.4
+noc-gateway	130.1.4.8	3	3	2	200 1000 2000
+dev-gateway	129.4.5.6

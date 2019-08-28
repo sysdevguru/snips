@@ -1,0 +1,73 @@
+## -*- ksh -*-
+##
+## SMakefile for CMU SNMP V1 Applications
+##
+## $Id: SMakefile,v 1.10 1998/08/06 01:22:59 ryan Exp $
+##
+###########################################################################
+
+# Default to vendor compiler, and aggressive optimizations.
+CC=cc
+SNMP=""
+MFARGS=""
+case `uname` in
+  IRIX) CFLAGS="-O2"
+	# Make sure we use the 32bit compiler versions
+	MFARGS="--with-mips-abi=32"
+	;;
+  SunOS)   
+	 if test "`uname -r`" = "4.1.3_U1"; then 
+	   # Our SunOS machines
+	   CC=gcc
+	   CFLAGS="-O3"
+	 else
+	   # Solaris
+	   CFLAGS="-xO4 -xdepend"
+	 fi
+	 ;;
+  Linux)
+	 CFLAGS="-O3"
+	 ;;
+  HP-UX)
+         CC="gcc"
+	 CFLAGS="-O3" 
+	 ;;
+  ULTRIX)
+         CC="gcc"
+	 CFLAGS="-O3" 
+	 ;;
+  *)     CFLAGS=-g ;;
+esac
+
+## ----------------------------------------------------------------------
+
+## Debugging on my workstation
+if test "`hostname`" = "lister.net.cmu.edu"; then
+  DEBUG_ME="true"
+fi
+
+if test "${DEBUG_ME}x" != "x"; then
+  CC=gcc
+  CFLAGS="-g -Wall -pedantic";
+  PWD=`pwd`
+  FOO=`echo $PWD | sed -e 's/\/[0-9]*$//'`
+  DESTDIR=/usr/tmp/ryan/depot/`basename $FOO`
+#SNMP="--with-snmp=/usr/tmp/ryan/depot/snmp"
+fi
+
+export CFLAGS CC
+
+## ----------------------------------------------------------------------
+
+##
+## This causes configure to be run as the 'makefile' command.
+##
+MFCOMMAND="./configure $SNMP $MFARGS" 
+
+##
+## This will allow you to execute 'smake install', and won't set
+## the prefix in GNU makefiles to the AFS destdir.  When the 'all' target
+## is made, the prefix will be '/usr/local'.  However, when install is
+## executed, the prefix will be set to '$(DESTDIR)'.
+##
+INSTCOMMAND="${MAKE} prefix=${DESTDIR} exec_prefix=${DESTDIR} install"

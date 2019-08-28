@@ -1,0 +1,73 @@
+# $Id: Makefile.mid,v 1.1 2001/08/01 23:57:38 vikas Exp $
+
+## To compile all the 'misc' utility programs for snips
+#  Need TOP and OPSMAIL for doing substitutions...
+#
+
+SHSCRIPTS = crontab.snips snipsprog.init
+PERLSCRIPTS = keepalive_monitors.pl logstats.pl logmaint.pl \
+		docrypt.pl notifier.pl
+SCRIPTS = $(SHSCRIPTS) $(PERLSCRIPTS)
+
+CPROGS = display_snips_datafile  eventselect
+
+# need OPSMAIL defined here
+#OPSMAIL = @OPSMAIL@
+#ADMINMAIL = @ADMINMAIL@
+MAIL=@MAIL@
+PSFLAGS=@PSFLAGS@
+
+##
+# Program specific defines.
+PROGCDEFS =	-DTEST
+PROGLIBS  =
+
+all:	$(CPROGS) sed
+
+display_snips_datafile:	display_snips_datafile.o
+	$(CC) $(CFLAGS)  $@.o $(LIBS) $(PROGLIBS) -o $@
+
+eventselect:	eventselect.o
+	$(CC) $(CFLAGS)  $@.o $(LIBS) $(PROGLIBS) -o $@
+
+
+sed:
+	@echo "Doing substitutions for ROOTDIR, PIDDIR, OPSMAIL, MAIL, PSFLAGS on: " ;\
+	 for f in $(SHSCRIPTS) ; do \
+	   echo " $$f" | tr -d '\012' ;\
+	   sed  \
+		-e "s#@ROOTDIR@#$(ROOTDIR)#g" \
+		-e "s#@PIDDIR@#$(PIDDIR)#g" \
+		-e "s#@OPSMAIL@#$(OPSMAIL)#g" \
+		-e "s#@ADMINMAIL@#$(ADMINMAIL)#g" \
+		-e "s#@HOST@#`hostname`#g" \
+		-e "s#@MAIL@#$(MAIL)#g"  \
+		-e "s#@PSFLAGS@#$(PSFLAGS)#g" \
+		$$f > $$f.seds ;\
+	done ;\
+	for f in $(PERLSCRIPTS) ; do \
+	   echo " $$f" | tr -d '\012' ;\
+	   sed  -e '1s|^#!/.*/perl.*|#!$(PERL)|' \
+		-e 's#^\(\ *$$snipsroot\ *=\ *\)\"\(.*\)\"\(.*SET_THIS.*\)#\1 "$(ROOTDIR)" \3#' \
+		-e 's#^\(\ *$$snipsroot\ *=\ *\)q(\(.*\))\(.*SET_THIS.*\)#\1 q\($(ROOTDIR)\) \3#' \
+		-e 's|^\($$email_program\ *=\ *\)\"\(.*\)\"\(.*SET_THIS.*\)|\1 "$(MAIL)" \3|' \
+		-e 's|^\($$email_program\ *=\ *\)q(\(.*\))\(.*SET_THIS.*\)|\1 q\($(MAIL)\) \3|' \
+		-e 's|^\($$OPSMAIL\ *=\ *\)q(\(.*\))\(.*SET_THIS.*\)|\1 q\($(OPSMAIL)\) \3|' \
+		-e 's|^\($$ADMINMAIL\ *=\ *\)q(\(.*\))\(.*SET_THIS.*\)|\1 q\($(ADMINMAIL)\) \3|' \
+		$$f >$$f.seds ;\
+	done ;\
+	echo ""
+
+install: all
+	$(INSTALL) $(INSTALLFLAGS) -c  -m 751 $(CPROGS) $(BINDIR)/
+	-@ for f in $(SCRIPTS) ; do \
+	   if [ -f $(BINDIR)/$$f ]; then \
+	   	echo "Not overwriting existing $(BINDIR)/$$f" ;\
+	   else \
+	   	$(INSTALL) $(INSTALLFLAGS) -c -m 751 $$f.seds $(BINDIR)/$$f ;\
+	   fi ;\
+	done
+
+clean:
+	rm -f $(DIRT) $(CPROGS) *.seds
+

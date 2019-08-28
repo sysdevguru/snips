@@ -1,0 +1,16 @@
+## Config for armon
+#
+ROUTER = nomad myPassword
+
+# Syntax:
+#	<NETWORK>  <INTERFACE>   <ZONE>
+# where
+#	NETWORK is a number or a range such as 50-60
+#	INTERFACE is the interface specified as s|e|a|f|t followed by a number
+#	   S (serial),  E (ethernet),  A (atm),  F (FDDI), T (Fast Ethernet)
+#	ZONE is a text string (spaces allowed)
+#
+#
+#
+50-50     e0   Netplex: Sub50
+test= 52  e0   Netplex: Sub50

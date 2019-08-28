@@ -1,0 +1,73 @@
+#!/usr/bin/perl
+#
+# THIS IS JUST A SAMPLE SCRIPT. Modify before using.
+#
+# Pipe the output of snipslogd into this script and send yourself email or
+# whatever else is required to send a page to yourself.
+#
+# sample log line:
+#
+#  Sun Jul 26 01:37:03 1998 [ippingmon]: \
+#       DEVICE rabbinical-FR-p 206.137.132.146 VAR ICMP-ping 0 3 Pkts \
+#       LEVEL Critical LOGLEVEL Critical NOCOP down
+#
+# This beep_oncall provided by Tim Peiffer (peiffer@nts.umn.edu)
+# It has both a sendmail and sendpage routine. 
+# This version of sendpage twiddles the $PAGETO variable and 
+# writes to qpage directly.
+#
+# Jan 6, 2002
+#
+$PAGETO = "123213134\@abc.metrocall.com";
+
+#$PAGETO = "jsmith\@mutley.nowhere.org" ;
+$PAGEPROG = "/usr/bin/mail";    # or mail
+
+if ($#ARGV >= 0) { $PAGETO = $ARGV[0]; }
+
+while (<STDIN>)
+{
+
+if(/.+\[(\S+)\]:\s+SITE|DEVICE\s+(\S+.+)\s+LEVEL\s+(\S+)\s+LOGLEVEL\s+(\S+)\s+.+
+$/)
+  {
+    # print "Sender=$1, Device=$2, Level=$3, Loglevel=$4
+    next if ($3 =~ /Info/);
+    &sendpage($1,$2,$3,$4,$PAGETO);
+  }
+}
+
+exit 0;
+
+sub sendpage {
+  my($sender,$device,$level,$loglevel,$pageto) = @_;
+  my($id,$snppgw) = split(/\@/, $pageto);
+
+open(SENDPAGE, "| /usr/local/bin/qpage -l 0 -f snips\@mutley.nowhere.org -m -p $id
+-s $snppgw");
+printf SENDPAGE <<EOF;
+>From snips\@mutley.nowhere.org
+To: $pageto
+From: snips\@mutley.nowhere.org
+
+SNIPS monitor detects $sender $device $level $loglevel
+EOF
+close(SENDPAGE);
+
+}
+
+
+sub sendmail {
+  my($sender,$device,$level,$loglevel,$pageto) = @_;
+
+open(SENDMAIL, "| /usr/sbin/sendmail -fsnips $pageto");
+printf SENDMAIL <<EOF;
+To: $pageto
+From: snips
+Subject: $sender $device $level, $loglevel
+
+SNIPS monitor detects $sender $device $level $loglevel
+EOF
+close(SENDMAIL);
+
+}

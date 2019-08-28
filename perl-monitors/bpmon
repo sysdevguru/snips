@@ -1,0 +1,229 @@
+#!/usr/local/bin/perl -w
+#
+# $Header: /home/cvsroot/snips/perl-monitors/bpmon,v 1.0 2001/07/13 00:35:47 vikas Exp $
+#
+# 	bpmon - perl bootp service monitor
+#
+# Date: September 21, 1993
+# Programmer: John Wobus, jmwobus@mailbox.syr.edu
+#
+# Modifications:
+#	Added 'bootpquery' support.	-meyer@phloem.uoregon.edu
+#	Updated for SNIPS release.	-vikas@navya.com, July 2000
+#  
+#
+#    (c) Syracuse University Computing & Network Services 1993
+#
+# No warranty is expressed or implied.  Permission to copy and use is
+# extended to all.  Permission to redistribute is granted under the
+# following conditions: it is not sold for profit; this copyright
+# notice remains intact; the same permissions extend to the recipient;
+# and if any changes are made, a notice is added so stating.
+#
+# What it does:
+#
+#    This program is used to monitor a bootp daemon. It uses the
+#    'bootpquery' (or 'bootptest') program to send out a bootp query 
+#    to the server, and reports whether it received an answer (in 
+#    SNIPS format).
+#     Example report of problem:
+#
+#   Device      Address      Time   +-Variable-+ +-Value-+  Condition
+#   butler  144.1.8.2       13:38  bootp status        1    Critical
+#
+#    This reports that a bootp server called "butler" with IP number
+#    144.1.8.2 went down at 13:38.
+#
+##### Output of 'bootpquery'
+#	sentinel.syr.edu# bootpquery -h
+#	Usage: bootpquery haddr [htype] [-i ipaddr] [-s server]
+#                        [-b bootfile] [-v vendor]
+#	sentinel.syr.edu# bootpquery 0800200846b7 -s 128.230.12.5 
+#	Received BOOTREPLY from lurch.cns.syr.EDU (128.230.12.5)
+#
+#	Hardware Address:       08:00:20:08:46:b7
+#	Hardware Type:          ethernet
+#	IP Address:             128.230.4.7
+#	Boot file:              /tftpboot/mx1500.sys
+#
+#	RFC 1048 Vendor Information:
+#  	   Time Offset:          18000 seconds
+#  	   Subnet Mask:          255.255.255.0
+#  	   Gateway:              128.230.4.1
+#  	   Domain Name Servers:  128.230.1.49, 128.230.12.5
+#  	   Log Server            128.230.12.5
+#  	   LPR Server:           128.230.12.5
+#	sentinel.syr.edu#
+#
+##### Output of 'bootptest'
+# Sending to 128.223.3.5 (request) htype:0 hlen:0 C:128.223.32.35 vend-rfc1395
+# Recvd from 128.223.3.5 (reply) htype:0 hlen:0 C:128.223.32.35 
+# S:128.223.3.5 sname:"phloem" vend-rfc1395 SM:255.255.254.0 GW:128.223.32.1 
+# DNS:128.223.3.5,128.223.8.9,128.223.21.104,128.223.32.29,192.220.250.1 
+# TS:128.223.32.35
+#
+
+######
+# Files used:
+#
+#   bootpquery/bootptest	a Unix command that queries a bootp
+#				server. 'bootptest' is available from CMU
+#   bpmon-confg                 configuration file.
+#   bpmon-output		created by this program in the SNIPS data dir.
+#
+# Snips event elements used:
+#   sender                     "bpmon"
+#   device
+#    name                      the server name
+#    addr                      the server's IP number
+#   var                       
+#    name                      "bootp status"
+#    value                     1=up, 0=down
+#    threshold                 always 2
+#    units                     always "entry"
+#
+# To install this:
+#   (1) Make sure bootpquery (or bootptest) is installed and set the
+#	'rprog' variable below.
+#   (2) Create your bpmon-confg file in SNIPS/etc/
+#
+# Configuration file format:
+#    #<text>                                   Comment line.
+#    haddr=<enet addr>                         Ethernet address of host
+#                                               that is running bpmon.
+#    broadcast                                 Check queries that are
+#                                               broadcast.
+#    <name> <ip number>                        Name and number of bootp
+#                                               server.
+#
+# Sample configuration file:
+#    # bpmon configuration
+#    haddr=080020011234
+#    butler 144.1.8.2
+#
+## 
+##
+#
+
+use strict;
+use vars qw ( $debug $snipsroot $rprog $varname $varunits $maxseverity
+	      @deviceaddr $haddr
+	    );
+
+BEGIN {
+  $snipsroot = "/usr/local/snips"  unless $snipsroot;	# SET_THIS
+  push (@INC, "$snipsroot/etc"); push (@INC, "$snipsroot/bin");
+  require "snipsperl.conf" ;		# local customizations
+}
+
+use SNIPS;
+
+#
+############################
+## Variables customization #  overrides values in the snipslib.pl library
+############################
+$rprog="./bootpquery";		# Path for bootpquery/bootptest program
+				# Set it to 'bootptest' if using that.
+$varname="Bootp_Server";
+$varunits="Status";
+$s_pollinterval=60*5;       	# Seconds to sleep between tries.
+$debug = 0;			# set to 1 for debugging output
+$maxseverity = $E_ERROR ;		# max severity of events
+
+############################
+
+-x $rprog || die("Could not find executable $rprog, exiting");
+
+##
+# Read the config file.
+sub readconf {
+  my $lineno = 0;
+  my $devcount = 0;
+
+  if ($debug == 0 && $libdebug > 0) {
+    $debug = $libdebug;
+    $libdebug = 1 if ($debug > 1) ;
+  }
+
+  undef @deviceaddr;
+  open(CONFIG,"<$s_configfile") || die("Couldn't find $s_configfile, exiting");
+  my $datafd = open_datafile($s_datafile, "w");
+  my $event = new_event();
+  alter_event($event, 'bpmon', undef, undef, undef, $varname, $varunits);
+
+  while(<CONFIG>) {
+    ++$lineno;
+    chomp;
+    if(/^\s*\#/) {next;}   # skip comments
+    if(/^\s*$/)  {next;}   # skip blank lines
+
+    if (/^\s*RRDTOOL\s+ON/i) { $SNIPS::dorrd = 1; next; }
+    if (/^(sleepinterval)\s+(\d+)\s*$/i || /^(pollinterval)\s+(\d+)\s*$/i) {
+      $s_pollinterval = $2;
+      next;
+    }
+    if (/^\s*haddr=(\S+)(\s.*)?$/) { $haddr=$1; next; }
+    if (/^\s*broadcast(\s.*)?$/) {
+      alter_event($event, undef, 'broadcast', '255.255.255.255', undef, undef, undef);
+      write_event($datafd, $event);
+      push (@deviceaddr, '255.255.255.255');
+      ++$devcount;
+      next;
+    }
+    if (/^\s*(\S+)\s+(\S+)(\s.*)?$/) {
+      alter_event($event, undef, $1, $2, undef, undef, undef);
+      write_event($datafd, $event);
+      push (@deviceaddr, $2);
+      ++$devcount;
+      next;
+    }
+  }
+  close(CONFIG);
+    
+  if($devcount < 1){ die("Nothing to monitor in $s_configfile, exiting") };
+}
+
+## This sends a bootpquery to the server. Note handling of broadcast query.
+#  Returns 0 if server works, 1 if it doesn't. 
+sub dotest {
+  my ($event, $i) = @_;
+  my ($server) = $deviceaddr[$i];
+  my ($command, $works, $goodresp);
+
+  if ($rprog =~ /bootptest/)	# using bootptest
+  {
+    $command="$rprog $server";
+    $goodresp="Recvd from $server \\(reply\\)";
+  }
+  else			# using 'bootpquery', not 'bootptest'
+  {	
+    if ($server eq "255.255.255.255") {$command = "$rprog $haddr";}
+    else {$command="$rprog $haddr -s $server"; }
+
+    $goodresp='Received\s+BOOTREPLY';	# note regexp
+  }
+
+  $works=0;
+  open(STDERR, ">&STDOUT")    || die "Can't dup stdout";
+  open(COMMAND, "$command |") || die "Can't open $command $!";
+  while (<COMMAND>) {
+    if (/$goodresp/) {
+      $works=1;
+      last;
+    }
+  }
+  close(COMMAND);
+
+  if ($works > 0) {
+    return (1, $works, 0, $maxseverity); # status, value, thres, maxseverity
+  }
+  else {
+    return (0, 0, 0, $maxseverity);	# down
+  }
+}
+
+##
+## main
+##
+&snips_main(\&readconf, undef, \&dotest);
+

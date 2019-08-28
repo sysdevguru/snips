@@ -1,0 +1,27 @@
+.SH NAME
+snmptrap2 - Send an SNMPv2 Trap to an SNMP agent acting in a manager
+role.
+.SH SYNOPSIS
+snmptrap [ -a agent-addr ] host community trap-number uptime [ OIDs ]
+
+.SH "DESCRIPTION"
+Snmptrap will send an SNMPv2 trap to a network entity.
+.PP
+The
+.I host
+specification may be either a host name or an internet address
+specified in "dot notation"
+.PP
+.I community
+is the community for the trap.
+.PP
+The 
+.I trap-number
+is the number of the trap.  Well-known traps are defined in RFC 1907.
+.PP
+Adding a "-d" to the argument list will cause the application to dump
+input and output packets.
+.PP
+Using the "-a" flag, will 'fake' a trap from another entity.
+.SH EXAMPLES
+% snmptrap snmp-example.net.cmu.edu public 6

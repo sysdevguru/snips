@@ -1,0 +1,254 @@
+.\" $Header: /home/cvsroot/snips/man/snipstv.1,v 1.0 2001/07/08 22:31:48 vikas Exp $
+.\"
+.TH snipstv 1 "June 2001"
+.SH NAME
+snipstv \- Curses display agent for the SNIPS systems and network monitoring
+software.
+.\" --------------------------------------------
+.SH SYNOPSIS
+.B snips
+[\-d] [\-C] [\-q] [\-w|e] [\-l \fI level\fR] [\-s] [\fIdatadir\fR]
+.LP
+This program displays SNIPS events on an ascii terminal using 'curses'.
+.\" --------------------------------------------
+.SH OPTIONS
+.TP
+.B \-d
+debug mode.
+.TP
+.B \-C
+On a terminal and system supporting colors, this option disables color mode.
+.TP \-q
+Quiet mode on startup. However, if a device comes up or down, it will enable
+beeping automatically until acknowledged by pressing 
+.I q
+again.
+.TP
+.B \-e
+Extended screen mode.
+.I snipstv
+has several display options to accomodate large device names or addresses
+that cannot fit on a regular 80 character terminal. Using this option, you
+can toggle between the various display modes.
+.TP 8
+\fB \-l\fR \fIlevel\fR
+Minimum severity level that should be displayed on startup.
+.nf
+	1	Critical events only
+	2	Errors and critical events
+	3	Warning, errors and critical events
+	4	Informational, warning, errors and critical events
+.fi
+.TP
+.B \-s
+For \fIsilent\fR mode - the warning bell/beep is permanently turned off when
+a new event occurs at the current display level.
+This option is only available from the command line.
+.TP 10
+.I <data directory>
+which is an alternate data directory name where SNIPS format data files are
+located (else it looks in @DATADIR@).
+.LP
+The default display severity level is Critical. However, you can set your
+shell environment variable
+.B SNIPS_SEVERITY
+to one of Critical, Error, Warning, Info to set your desired severity
+level.
+.\" --------------------------------------------
+.SH DESCRIPTION
+.LP
+.B snipstv
+.I (snips text view)
+is the display agent for viewing the event data collected by various
+monitoring programs in the SNIPS data format.
+It uses the popular Unix
+.I curses
+screen management system and thus supports a wide variety of terminal types.
+.PP
+All events in SNIPS are classified as
+.I CRITICAL, ERROR, WARNING
+and
+.I INFO.
+Depending on the user selectable display 
+.IR level ,
+all events more severe than the selected level are displayed.
+Hence if the selected display level is '3 (=WARNING)',
+then all CRITICAL, ERROR and WARNING events are displayed on the terminal.
+.PP
+The screen automatically scrolls if there are more than a screenful of events
+to be displayed. If a new device comes up or goes down at the current level,
+the terminal starts beeping (if the terminal type supports it).
+.PP
+A portion of the screen is used for displaying text messages (the 
+.I MESSAGES
+window). All files in a specific 
+.I MSGS
+directory (set during compile time) are displayed line by line sequentially.
+This can give information about scheduled downtimes,  past logs, debug
+messages, etc.
+
+Additional capabilities include:
+.IP -
+freezing the screen so that the next screenful is displayed only when 
+the user enters a key on the terminal
+.IP -
+filtering out the devices to be displayed by putting a filter which tests
+against the lines to be displayed
+.IP -
+alternate display formats.
+.\" ---------------------------
+.SH DISPLAY FIELDS
+The various fields that are displayed in \fBsnipstv\fR are:
+.IP Device name
+which is the name of the system that is being monitored.
+.IP Address
+This is the network address (IP, OSI NSAP) or any other resource
+for the entity being monitored.
+.IP Rating
+this is a string of 0's or 1' indicating the status of the last 4 (or 6) polls 
+for the device. The most 
+.I recent
+poll status is the 
+.I leftmost 
+digit and is 1 if the device status was UP, and 0 if the device status was
+DOWN.
+.IP Date/Time
+the time stamp for the event. Note that some (most) monitors set this to the
+time when the device was \fIinitially\fR detected in the current state 
+.RI ( e.g.
+when a device was first detected unreachable via
+.IR ping ).
+.IP Sender
+is the name of the monitoring program
+.RI ( "ippingmon, nsmon, tsmon"
+) that recorded this event.
+.IP Variable
+is the name of the variable that is being monitored. Further information
+regarding the type of variable and its properties can be found in the
+descriptions of the respective 
+.IR Sender .
+Typical names are
+.I reachability, thruput, named-status.
+.IP Value
+It is a unsigned long integer indicating the value of the variable being
+monitored.
+.IP Threshold
+The threshold value of the variable due to which the event is in the present
+state/level. This can be a less-than or a greater-than threshold type,
+depending on the monitor.
+.IP Units
+it is the units for the value being displayed.
+.IP Flags
+This is an integer used internally by the various agents. Each bit signifies
+one of the following flags for that particular device:
+.in +.5i
+.DS
+0x01	Device UP
+.br
+0x02	Device DOWN
+.br
+0x04	Status UNKNOWN
+.br
+0x08	Device in TEST mode
+.DE
+.in -.5i
+.IP Condition
+is the last known condition of the variable and is listed as one of
+.I critical, error, warning 
+or
+.I informational.
+
+.\" --------------------------------------------
+.SH RUN TIME OPTIONS
+.LP
+.I snipstv
+allows certain options to be entered at the prompt while running the
+program. A carriage return is not necessary after entering an option,
+and the keystrokes are not echoed. Thus, to change the display level,
+the user simply presses a 
+.I 'l'
+on the keyboard followed by a number representing the display level.
+
+The following options can be entered at the prompt while running 
+.BR snipstv \-
+.TP
+.B h
+for help
+.TP
+.B b
+to turn the bell off once a critical event is acknowledged.
+.TP
+.B c
+Condense the number of lines in the 
+.I event
+window, and correspondingly increase the size of the 
+.I messages
+window.
+.TP
+.B d
+for toggling debug mode. Debug messages are displayed in the MESSAGES
+sub-window of the snipstv display.
+.TP
+.B e
+for toggling between extended (132 column) and short (80 column) display modes.
+.TP
+.B f
+For toggling \fIfreezing\fR the screen. Once this option is set, the screen
+will not scroll until the user enters a key on the keyboard.
+.TP
+.B l
+.I <level>
+for selecting a display level. Here the 
+.I level
+is any number between 1 and 4 (where 
+.RI 1= "Critical, "
+.RI 2= "Error, "
+.RI 3= "Warning, "
+.RI 4= "Info "
+). Alternatively, the characters
+.I C, E, W, I
+can also be used.
+.TP
+.B r
+to redraw/refresh a messed up screen.
+.TP
+.B "s /"
+to put a search filter on the lines being displayed. Only lines that match
+the filter specified will be displayed. The filter can have multiple words
+separated by
+.B '|'
+or
+.B '&'
+for matching either or all of the words. The current display mode
+(80 column or 132 column expanded) is taken into consideration when matching
+the pattern.
+.br
+Thus, a filter such as:
+.in +.5i
+.DS
+AWORD | BWORD | CWORD & DWORD | EWORD
+.DE
+.in -.5i
+will search for lines that have \fIeither\fR
+.RS
+.IP -
+AWORD or
+.IP -
+BWORD or
+.IP -
+CWORD and DWORD (both)
+.IP -
+EWORD
+.RE
+.IP
+in the display lines.
+.TP
+.B x
+To \fIexpand\fR the number of lines in the \fIevent\fR window.
+.TP
+.B q
+to quit from the program.
+.\" --------------------------------------------
+.SH AUTHOR
+Vikas Aggarwal, vikas@navya.com.
+

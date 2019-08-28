@@ -1,0 +1,62 @@
+.SH NAME
+snmpget - Communicates with a network entity using SNMP GET Requests.
+.SH SYNOPSIS
+snmpget [ -d ] [ -V ] [ -v ] [ -q ] [ -p port ] [ -r retries ] [ -t
+timeout ] [ -1 ] [ -2 ] host community object-identifier [ object-identifier ]
+.SH "DESCRIPTION"
+Snmpget is an SNMP application that uses GET Requests to query for
+information about a network entity.
+.PP
+The
+.I host
+specification may be either a host name or an internet address
+specified in "dot notation"
+.PP
+If the network entity has an error processing the request packet, an
+error packet will be returned and a message will be shown, helping to
+pinpoint why the request was malformed.
+.PP
+If the tree search causes attempts to search beyond the end of the
+MIB, a message will be displayed:
+.PP
+.I End of MIB.
+.PP
+Adding a "-d" to the argument list will cause the application to dump
+input and output packets.
+.PP
+The "-V" flag returns the version of the app, and the version of the
+SNMP library used.
+.PP
+The "-v" flag provides a more verbose output format.
+.PP
+The "-q" flag just prints the returned value, and nothing else.
+.PP
+The "-p" flag allows you to specify a port to use for the SNMP
+requests.
+.PP
+The "-r" flag sets the number of retries.  The default is 4.
+.PP
+The "-t" flag sets the timeout in microseconds.  The default is
+1000000.
+.PP
+The "-1" and "-2" flags set the SNMP version of the outgoing request.
+.SH EXAMPLES
+% snmpget snmp-example.net.cmu.edu public .1.3.6.1.2.1.1.1.0
+.PP
+.ti +5
+returns
+.ti -5
+.PP
+Name: mib2.system.sysDescr.0 -> DisplayString : Unix 4.3BSD
+.PP
+.PP
+% snmpget -v snmp-example.net.cmu.edu public .1.3.6.1.2.1.1.1.0
+.PP
+.ti +5
+returns
+.ti -5
+.PP
+.nf
+Name:            mib2.system.sysDescr.0
+Returned Type:   Octet String
+Value:           "Unix 4.3BSD"

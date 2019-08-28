@@ -1,0 +1,39 @@
+# $Id: Makefile.mid,v 1.0 2001/07/09 04:04:18 vikas Exp $
+#
+# Makefile for 'trapmon'
+#
+
+# directory for CMU snmp sources
+CMUSNMP =	$(SRCDIR)/cmu-snmp
+
+## Compilation definitions
+#  The CDEF specs are specific to this sub-module. The CFLAGS can be
+#  over-ridden by the top level makefile.
+PROGCDEFS =	-I$(CMUSNMP)/include
+PROGLIBS  =	-L$(CMUSNMP)/lib -lsnmp
+
+TARG  =	trapmon
+OBJS  = trapmon.o snips_specific.o
+INITFILES = trapmon
+
+$(TARG):	$(OBJS) Makefile
+	$(CC) $(CFLAGS) $(OBJS) $(LIBS) $(PROGLIBS) -o $@
+
+install: $(TARG)
+	$(INSTALL) $(INSTALLFLAGS) -c -m 4750 $(TARG) $(BINDIR)/
+	@if [ `whoami` = "root" ]; then \
+		chown root $(BINDIR)/$(TARG) ;\
+		ls -lg $(BINDIR)/$(TARG) ;\
+	 else \
+		echo "";echo "___Installed $(TARG) needs to be root suid___" ;\
+		echo "Do as root manually" ;\
+	 fi
+
+clean:
+	rm -f $(DIRT)
+
+rcs:
+	@echo "Doing 'rcs' in 'trapmon'
+	@-for i in $(OBJS); do \
+		$(CO) -q `basename $$i .o`.c ;\
+	  done

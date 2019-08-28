@@ -1,0 +1,8 @@
+.SH NAME
+blank-manpage-stub
+.SH SYNOPSIS
+blank-manpage-stub
+.SH "DESCRIPTION"
+blank-manpage-stub
+.SH EXAMPLES
+blank-manpage-stub

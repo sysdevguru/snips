@@ -1,0 +1,9 @@
+# 'updates' file for listing comments or status about a device
+# Format of each line is:
+#	devicename : deviceaddress : variable <space>  comment
+# If the comment begins with a '(H)', the device is hidden from the web view
+# This file is automatically edited by genweb.cgi (or snipsweb.cgi) so
+# it should be writable by your httpd process.
+
+device1:198.18.178.11:ICMP-ping	This is a short comment
+device2:178.121.1.12:RPC-ping	(H) This device is hidden

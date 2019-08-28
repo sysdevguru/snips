@@ -1,0 +1,24 @@
+# $Id: tpmon-confg,v 1.0 2001/07/09 04:00:25 vikas Exp $
+#
+# Config file for 'tpmon' - throughput monitor
+#
+# The program connects to the discard port (port 9) of the listed machines
+# and transfers data for 30 seconds to measure the thruput. It then sleeps
+# for POLLINTERVAL seconds.
+# Sleep for 2 hours between polls
+
+POLLINTERVAL	7200
+
+# To enable RRDtool data collection
+RRDTOOL  ON
+
+# If the thruput (in bits per second) falls below the threshold, it raises
+# the severity to WARNING level. you can use the 'tptest' program to see
+# the typical thruput to a device.
+#
+# <hostname>	<ip address>	<threshold in Kbps>	[TEST]
+#
+
+nisc		128.121.50.7	2000
+bonehead	128.121.50.140	2000
+rutgers		128.6.7.38	 100

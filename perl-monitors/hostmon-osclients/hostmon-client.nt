@@ -1,0 +1,310 @@
+#!./perl
+#
+# $Header: /home/cvsroot/snips/perl-monitors/hostmon-osclients/hostmon-client.nt,v 1.0 2001/07/09 04:40:14 vikas Exp $
+#
+#	hostmon-client for NT platforms
+#
+# THIS FILE INSTALLATION IS DIFFERENT FROM OTHER UNIX hostmon-client's.
+# PLEASE SEE INSTALLATION INSTRUCTIONS BELOW.
+#
+# This file uses 'df' and 'uptime' from a collection of NT tools available
+# at http://virtunix.itribe.net/mystuff.html
+# Since NT cannot 'fork' a telnet process, two separate processes must be
+# started (one a telnet daemon, other is the data gatherer).
+#
+# INSTALLATION:
+#	1. Install ActivePerl (www.activestate.com)
+#	2. Install the NT tools from  http://virtunix.itribe.net/mystuff.html
+#	3. Set $utilsdir,  $SNIPS_HOST in this file
+#	4. Start 2 instances of this program as services using the
+#	   SRVANY.EXE program that comes with the NT resource kit.
+#	   One of the instance should be started with /daemon as the
+#	   command line option.
+#
+# AUTHOR:
+#	Contributed by Sean R. Brown, srbrown@nyx.net 8/8/2000
+##
+
+#
+##
+use strict;
+use vars qw ( $SNIPS_HOST $HOSTMON_SERVICE $HOSTMON_PORT
+	      $debug $sleeptime $dirname $utildir $pidfile $datafile $tmpfile
+	      @monitorlist @permithosts
+	    );
+
+-f "snipsperl.conf" && require "snipsperl.conf";
+
+############################
+## Variables customization #
+############################
+#
+## Define the list of permitted hosts that can connect to the hostmon port
+# and get data (the name of the host that runs the hostmon server)
+# Add the SNIPS loghost to this list also.
+$SNIPS_HOST = "snips.your.domain" unless $SNIPS_HOST;	# SET_THIS
+@permithosts = qw(127.0.0.1 localhost) unless @permithosts;
+push @permithosts, $SNIPS_HOST;
+$debug = 0;                             # set to 1 for debugging output
+ 
+$sleeptime = 5*60 ;
+@monitorlist = qw(uptime df);
+
+$HOSTMON_SERVICE = "hostmon" unless $HOSTMON_SERVICE ;
+$HOSTMON_PORT = 5355 unless $HOSTMON_PORT ;
+
+# add to include path for os specific modules. You must set this to
+# the installation directory of hostmon-osclients
+($dirname = $0) =~ s@/[^\\]*$@@ ;
+push(@INC, $dirname, ".", "hostmon-osclients");		# SET_THIS
+
+# Add to the path.
+$utildir = "c:\\bin\\32-bin\\utils";	# SET_THIS to NT tools dir
+$ENV{'PATH'} .= ";$utildir";
+
+#  The output data filename is "/tmp/<hostname>.hostmon"
+#  This must match the name used in the rcp from 'hostmon-collector'
+$datafile = "C:\\temp\\" . `$utildir\\hostname` ;
+chomp $datafile;
+$datafile .= ".hostmon" ;
+$tmpfile = "$datafile" . ".tmp" ;	# temporary output file
+
+#######################################################################
+#
+## Following couple of subroutines are the 'daemon' part of the client.
+#
+
+##
+##
+sub serve_telnet {
+  use Socket;
+
+  my @permitaddrs = ();
+
+  $datafile = '/etc/motd'  unless $datafile;
+  $debug && print STDERR "(debug) datafile= $datafile\n";
+
+  ## Convert IP address of permitted hosts.
+  foreach my $host (@permithosts)
+  {
+    if ($host =~ /[\d\.]+/) {	# IP address, not name
+      my $paddr = inet_aton($host);
+      if ($paddr) { push (@permitaddrs, $paddr); }
+      else { print STDERR "Invalid hostname/IP address $host\n"; }
+    }
+    else {
+      my ($name, $alias, $addr, $len, @paddrs) = gethostbyname($host);
+      if ($#paddrs < 0) {
+	print STDERR "Cannot resolve $host, ignoring\n";
+      }
+      else { push (@permitaddrs, @paddrs); }
+    }
+  }
+
+  die "No hosts are permitted, permit list is empty" if ($#permitaddrs < 0);
+  if ($debug) {
+    foreach my $paddr (@permitaddrs) {
+      my $dottedquad = inet_ntoa($paddr);
+      print STDERR "(dbg) telnet_daemon() permitting ($dottedquad)\n";
+    }
+  }
+
+  ## Get a socket
+  if (! socket(SERVER, PF_INET, SOCK_STREAM, getprotobyname('tcp')) ) {
+    die "socket() call failed: $!";
+  }
+
+  ## so we can restart the server quickly
+  setsockopt(SERVER, SOL_SOCKET, SO_REUSEADDR, 1);
+  select( (select(SERVER), $| = 1)[0] ) if $debug ;	# unbuffered
+
+  ## Get port number
+  my $port = getservbyname($HOSTMON_SERVICE, 'tcp');
+  $port = $HOSTMON_PORT  if ((! $port) || $port !~ /^\d+$/);
+  $debug && print STDERR "(dbg) telnet_daemon Port= $port\n" ;
+
+  my $myaddr = sockaddr_in($port, INADDR_ANY);
+    
+  ## Now bind to the socket
+  bind (SERVER, $myaddr) || die "bind: $!";
+  listen (SERVER, 5) || die "listen: $!";
+  
+  ## Listen for connections forever.
+  while (1)
+  {				# forever
+    ## Check remote's address
+    my ($paddr, $remote);
+    my $permitted = 0;
+
+    ($debug > 1) && 
+      print STDERR "(telnet_daemon) Listening for connection\n";
+    
+    ($remote = accept(CLIENT, SERVER)) || die $!; # waits here for connection
+    
+    my ($remoteport, $remoteaddr) = sockaddr_in($remote); # packed ip addr
+    
+    foreach $paddr (@permitaddrs)  { # compare packed addresses
+      if ($paddr eq $remoteaddr) { # note 'eq' for string cmp
+	$permitted = 1;
+	last;
+      }
+    }
+
+    my $remoteip = inet_ntoa($remoteaddr);	# dotted quad notation
+    
+    if (! $permitted)  {
+      print STDERR "(telnet_daemon) rejecting connection from $remoteip\n";
+      print CLIENT "Connection denied\n" if ($debug);
+      close (CLIENT);
+      next ;
+    }
+    $debug &&
+      print STDERR "(telnet_daemon) allowing connection from $remoteip\n";
+    
+    # while (<CLIENT>) { print STDERR "(client) $_"; } # to read from remote
+    
+    if (open (IFILE, $datafile)) {
+      while (<IFILE>) {
+	print CLIENT $_ ;
+      }
+      close (IFILE) ;
+    }
+    close (CLIENT);
+  }	# end: forever
+
+  ## not reached ##
+
+}	# sub serve_telnet()
+
+sub create_telnet_daemon {
+  print STDERR "telnet daemon starting\n" if ($debug);
+  &serve_telnet;
+}
+
+####################################################################
+## Following routines are not doing any 'tests'. They are utility ##
+## routines.                                                      ##
+####################################################################
+
+##
+# Define a boolean variable for testing OS types easily in the above
+# routines. Also set the $osfile variable
+sub standalone {
+  my $me = $0;
+  $me =~ s|^.*/||;
+  $pidfile = "C:\\tmp\\$me.pid";
+
+  if(open(PID,"< $pidfile"))
+  {
+    my $pid = <PID>; chomp $pid ; close(PID);
+    if ($pid =~ /^\d+$/)
+    {
+      kill 15, $pid;
+      sleep 2;
+      if (kill 0 => $pid) { die "Could not kill earlier process pid $pid"; }
+    }
+  }	# end: open(PID...)
+  
+  open(PID, "> $pidfile") ||die "standalone: cannot create $pidfile, $!\n";
+  print PID "$$\n"; close(PID);
+  
+  foreach ('TERM','HUP','INT','KILL','QUIT') { $SIG{$_} = \&clean_out_onexit; }
+  
+}	# sub standalone()
+
+## Die on getting a terminate signal. Clean up data files.
+##
+sub clean_out_onexit {
+  my ($err) = @_;
+
+  unlink ($datafile, $tmpfile, $pidfile);
+
+  if ($err) { die "($$) $err"; }
+  else { die "($$) Terminating on signal\n"; }
+}	# clean_out_onexit()
+
+## Following are the various NT monitors
+##
+###  Uptime
+###	 output:  12:09pm  up 16 days, 19:58,  5 users
+###
+sub uptime {
+  my $cmd = "$utildir\\uptime |";
+  my $value = -1 ;
+  my $uptime = 0;    
+  open (CMD, "$cmd");
+  while (<CMD>) {
+    $debug &&  print STDERR "(debug)uptime: $_" ;
+    chomp; tr/\r\n//d;
+    if ( /^.*up\s+(\d+)\s+day.*,\s*(\d+):(\d+),.*$/ ) {
+      $uptime = ($1 * 1440) + ($2 * 60) + $3;
+      printf "Uptime %d mins\n", $uptime;
+      last ;
+    }
+    else { print STDERR "(debug)uptime() : command format unknown\n"; }
+  }	
+  close (CMD);
+}
+
+### df
+### output:
+### A:    not mounted
+### C:    3148708  3018440   130268    95%    NTFS    <blank>
+### D:     219642   219642        0   100%    CDFS    VOLUME_1
+
+sub df {
+  my @drives = qw(C D E);
+  open(CMD, "$utildir\\df |");
+  while(<CMD>){
+    chomp; tr/\r\n//d;
+    next if (/^\s*Drive/);	# ignore header line
+    $debug && print STDERR "(debug)df: $_\n";
+    foreach my $dr (@drives) {	# Only parse the drives you define, else
+				# you get mapped network drives as well
+      if(/^\s+(\S):\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)%.*$/ && $1 eq $dr) {
+	printf "DFspace_avail %d MB $1:\n", int($4/1024);
+	printf "DFspace_%%used_$1 $5 %%full $1\n";
+      }       
+    }
+  }	# while
+  close (CMD);
+}	# end &df()
+
+###
+### main
+###    
+
+if ($0 =~ /daemon/i) { &create_telnet_daemon; exit 0; }
+if ($#ARGV >= 0 && $ARGV[0] =~ /daemon/i) {
+  shift; &create_telnet_daemon; exit 0;
+}
+if ($#ARGV >= 0) { print STDERR "Unknown flag $ARGV[0], exiting\n"; exit 1; }
+
+print STDERR "(debug) MonitorList= @monitorlist\n", 
+  "(debug) Outputfile= $datafile\n" if ($debug);
+
+while (1)
+{
+  no strict 'refs';	 # allow using $function()
+  my $stime = time;
+  
+  open (DFILE, "> $tmpfile") || clean_out_onexit("Cannot open $tmpfile, $!");
+  select(DFILE);		# select default output file
+  
+  print "TIME $stime secs\n";	# needed in the output
+  foreach my $s (@monitorlist) {
+    #local $SIG{CHLD} = 'IGNORE';	# for external programs called
+    &$s() ;	# call the subroutines.
+  }
+  close (DFILE) ;
+  unlink $datafile;
+  rename ($tmpfile, $datafile);
+  
+  my $deltatime = time - $stime;	# time to do tests
+  $debug  && print STDERR "(dbg) sleep for= $sleeptime - $deltatime\n";
+
+  sleep($sleeptime - $deltatime)   if ($sleeptime > $deltatime);
+
+}	# end while(1)
+
+END {  &clean_out_onexit;  }

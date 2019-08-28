@@ -1,0 +1,347 @@
+<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML//EN">
+<!-- $Header: /home/cvsroot/snips/docs/design.html,v 1.0 2001/07/17 02:50:22 vikas Exp $ -->
+<html>
+
+<head>
+<title>The Design of SNIPS</title>
+<style>
+<!--
+body  { background-color: White; font-size: small;
+      font-family: Verdana, Arial, Helvetica, sans-serif }
+.main { background-color: White; font-size: small;
+      font-family: Verdana, Arial, Helvetica, sans-serif }
+a:link       { text-decoration: none; color: blue }
+a:hover      { text-decoration: underline; color: red }
+-->
+</style>
+<meta name="GENERATOR" content="Microsoft FrontPage 4.0">
+<meta name="ProgId" content="FrontPage.Editor.Document">
+</head>
+
+<body bgcolor="#ffffff">
+
+<div align="center">
+  <center>
+  <table border="0" cellpadding="6" cellspacing="0" width="98%" class="main">
+    <tr>
+      <td align="right" valign="top" width="120">&nbsp;</td>
+      <td width="10"></td>
+      <td valign="bottom">
+        <p align="left"><font size="5" face="Arial,Helvetica">SNIPS- Design and
+        Internals</font><br>
+        <font size="3" face="Arial,Helvetica">vikas@navya.com<br>
+        June 2001</font></td>
+    </tr>
+    <tr>
+      <td></td>
+      <td></td>
+      <td>&nbsp;
+        <hr noshade>
+      </td>
+    </tr>
+    <tr>
+      <td valign="top"> <font size="2" face="Arial,Helvetica">
+	      <a href="#overview"><strong>Overview</strong></a> <br>
+		¤ Design principles<br>
+		¤ Architecture <br><br>
+	      <a href="#clibrary"><strong>SNIPS C Library</strong></a> <br><br>
+	      <a href="#monitors"><strong>Monitors</strong></a><br><br>
+	      <a href="#userInterfaces"><strong>User Interfaces</strong></a><br>
+		¤ snipstv<br>
+		¤ snipsweb<br>
+		¤ tkSnips<br><br>
+	      <a href="#reporting"><strong>Reporting</strong></a><br><br>
+	      <a href="#futureWork"><strong>Future Work</strong></a><br>
+        </font></td>
+      <td></td>
+      <td valign="top">
+        <h2><a name="overview">Overview</a></h2>
+        <p>SNIPS is a system and network monitoring software which runs on Unix
+        platforms and monitors reachability, ports, routes, system resources,
+        etc. It is modular in design, and allows adding new monitors easily and
+        without impacting other portions of the software- in fact, a large
+        number of the monitors are contributed by various SNIPS users.</p>
+        <p>The basic design principles&nbsp; behind SNIPS are relatively few:
+        <ul>
+          <li>allow multiple users to see the same data being collected instead
+            of requiring each user to start their own set of monitors</li>
+          <li>multiple layers of severity to avoid any false alarms (to stop the
+            NOC operator from ignoring an alarm because it 'usually goes away')</li>
+          <li>optimized data storage- log a datapoint only when the severity of
+            an event changes</li>
+          <li>be able to view the events from a non-graphical interface</li>
+        </ul>
+        <p>The precursor to SNIPS (NOCOL) was developed in early 1990s when most
+        of the commercial packages required pretty extensive hardware to run,
+        whereas NOCOL could run on a very low end system, the monitors could be
+        separated from the logging and reporting machine since they communicated
+        over a network, and the datapoints collected were very small in number
+        since they were only recorded when the severity of a device/variable
+        changed. So, the disk space on a machine could vary from 10% to 60%
+        full, and only one entry is logged since this would all be considered
+        'normal'. If the disk becomes 80% full,&nbsp;&nbsp; a 'warning' message
+        is generated and another datapoint is logged. This simple approach gives
+        amazingly small volumes of data, and yet presents a perfectly
+        comprehensive (though quantized) report on the variables.</p>
+        <p>The graphing function in SNIPS is done using <a href="http://www.caida.org/tools">RRDtool</a>
+        (same author as MRTG), which uses circular databases and aggregates
+        historical data, thus preventing the databases from growing without
+        bounds.</p>
+        <p>The architecture of SNIPS itself is very simple- the monitors poll
+        the devices and assign a threshold to each 'poll' (called an '<em>event</em>').
+        These thresholds are user settable and vary from monitor to monitor (in
+        fact, the core of the software does not care what is being monitored and
+        does not store any intelligence about the variables). All intelligence
+        of the variable being monitored and what conditions are to normal and
+        abnormal is built into the monitor and their config files.</p>
+        <p align="center"><img src="images/snips-arch.gif" alt="snips-arch.gif" width="373" height="487"></p>
+        <p>The monitor would then set:
+        <ul>
+          <li>the current value of the variable (thruput, lost packets)</li>
+          <li>the current threshold (there can be upto 3 thresholds for 3
+            different levels of severity)</li>
+          <li>timestamp, etc.</li>
+        </ul>
+        <p>and invoke a Snips API function. This writes out the current values,
+        etc. to a realtime data file on disk (this contains the current state of
+        any device/variable) and if the severity has changed, then this also
+        gets logged to a incremental logging daemon (snipslogd).</p>
+        <p>All user displays can then display the data from the realtime data
+        directory, whereas the alarm and notification subsystem gets activated
+        by the incremental&nbsp; 'snipslogd' process. The snipslogd process can
+        filter events based on user defined criteria, and invoke an SMS pager,
+        send email, perhaps even run some automated tests or open a trouble
+        ticket.</p>
+        <p>An '<strong>event</strong>' is basically a unique tuple of&nbsp;
+        device name + device address + variable name. Each event has the current
+        data value of the variable being monitored, and also a threshold value
+        corresponding to the current severity level. This is best understood by
+        looking at the <em>event</em> data structure in the <em>snips.h</em> C
+        include file.</p>
+        <p>This simple architecture has proven to work very effectively in this
+        application. The base system has not really changed since the software
+        was initially written, but new monitors, displays, notification software
+        is continually being added without any changes to the core system.</p>
+        <hr noshade>
+        <h2><a name="clibrary">The SNIPS C Library</a></h2>
+        <p>The EVENT data structure for SNIPS has the following fields
+        (presented in pseudocode here):</p>
+        <blockquote>
+          <small>
+          <pre>#define DATA_VERSION 0x1</pre>
+          <pre>char * sender		/* monitor name */
+char * device.name
+char * device.addr
+char * var.name
+u_long var.value
+u_long var.threshold
+char * var.units
+u_char mon day hour min
+u_char severity		/* enum CRITICAL, ERROR, WARN, INFO */
+u_char loglevel		/* CRITICAL, ERROR, WARN, INFO */
+u_char nocop		/* state of device- UP/DOWN etc. */
+u_char rating		/* see below */
+u_long op		/* for internal monitor use */
+u_long id		/* unique event ID */</pre>
+          </small>
+        </blockquote>
+        <p>The 'rating' field is a sequence of 0 and 1s and shows the status of
+        the device for the last N polls (the most recent poll is on the left).
+        The 'op' field is for future internal use by the monitors, and the 'id'
+        is a unique event identifier which changes each time the state of the
+        event changes (not implemented at this time).</p>
+        <p>A typical C monitor has the following layout:</p>
+        <blockquote>
+          <pre>snips_main()
+	fork, create pid file, etc.
+	read config file; ## monitor specific
+	write data file with event state UNINIT;
+	LOOP:
+	foreach device {
+		poll device;  ## monitor specific
+		update event with UP/DOWN status
+		write out event to datafile
+	}
+	repeat LOOP;</pre>
+        </blockquote>
+        <p>The monitor needs to have 2 functions specific to the variable being
+        monitored- <em>read_config()</em> and <em>poll_devices()</em>. It then
+        sets the value of the global variables <tt>readconfig_func</tt> and <tt>polldevices_func</tt>
+        to these two functions, and call <em>snips_main()</em>.&nbsp; That is
+        all that is needed in most monitors.</p>
+        <p>Deviations from the above process can be seen in the following
+        monitors:</p>
+        <blockquote>
+          <p><strong>trapmon</strong> - since it has to display incoming traps
+          and not really 'poll' any device, this program expires old events
+          after 30 minutes from the data file by zeroing them out.</p>
+          <p><strong>etherload</strong> - it has a little more complicated
+          initialization and monitoring since its very specific to the operating
+          system.</p>
+        </blockquote>
+        <p>&nbsp;</p>
+        <hr noshade>
+        <h2><a name="monitors">The Monitors</a></h2>
+        <p>The monitors collect variable values and compares to see if it
+        exceeds any of the 3 thresholds (warning, error, critical- these
+        thresholds are user configurable). This is all done using the snips
+        library functions, so in effect, all the monitor needs to do is get the
+        value for the variable being monitored and read the thresholds from a
+        config file. The snips library ensures consistency in the way that the
+        monitoring is processed by the rest of the system.</p>
+        <p>Each monitor is unique in the way that it monitors its respective
+        variable. The DNS monitor needs to make an authoritative DNS query to
+        see if the dns server is configured properly, the Port monitor needs to
+        connect to TCP or UDP ports to ensure that any processes are responding
+        properly, and the SNMP monitor needs to monitor snmp variables using the
+        SNMP protocol. The intelligence about the entity being monitored and how
+        to monitor it lies strictly in the monitor- the rest of the snips
+        subsystem&nbsp; is just expecting a&nbsp; device name, variable and its
+        value.</p>
+        <p>A fair amount of effort has gone into making the monitors very
+        efficient where possible in order to allow them to scale to a large
+        number of devices. Connectionless (UDP) monitors are specially well
+        suited to using the select() system call so that many devices can be
+        queried at the same time and the monitor then waits for the responses to
+        come in. The other option was to fork multiple processes with a single
+        parent and each process monitors one device. However, the level of
+        scalability that could be achieved with the first method proved to be
+        far more than what could be achieved with the forking method.</p>
+        <p>To emphasize the above, consider 'pinging' 100 devices with 5 packets
+        each, waiting 1 second for each response and 1 sec between each packet
+        to the same host. If done serially, this would take at least 500 seconds
+        for each pass. If we fork multiple processes to do it in parallel, this
+        would take about 5 seconds, but we would have to fork 100 processes. The&nbsp;
+        'multiping' monitor could send out 1 packet to each of the 100 devices
+        in about 10 seconds and then listen for the responses to come in-
+        effectively taking about 15 seconds for the entire pass.</p>
+        <p>Building this level of 'multi-tasking' is a lot more difficult in the
+        TCP based services since it would require non-blocking I/O, but it it
+        important to do this for monitors such as 'portmon'. All of these type
+        of monitors (using select()) are limited by the MAXFD value (maximum
+        open file descriptors that can be handled by the select() call) which
+        was 64 in older OS versions, and is 1024 in newer Operating systems.
+        This implies that a monitor using non-blocking async sockets can monitor
+        these many devices at a time using a single process.</p>
+        <p>The 'hostmon'&nbsp; monitor is an example of letting the remote hosts
+        (that are being monitored) do the local data collection (i.e.
+        distributing the 'time consuming' part to hostmon-clients). The
+        'hostmon' process runs on the snips monitoring host and simply takes all
+        these data files and uses them as raw input for processing.</p>
+        <p>In some cases, the monitors do not need any data other than what is
+        in the snips data structure written to disk (the raw data), whereas in
+        others they need to store ancillary variable and device specific
+        information in memory. All possible efforts are made to avoid storing
+        unnecessary data in memory and having 'bloated' monitoring processes.</p>
+        <p>While developing new monitors, asynchronous socket polling should be
+        used where possible, and they should store minimal information in
+        process memory (such as hostname, etc.) to avoid memory bloat.</p>
+        <hr noshade>
+        <h2><a name="userInterfaces">User Interfaces</a></h2>
+        <p>The user interfaces need to display the <u>current</u> state of&nbsp;
+        the devices being monitored, and this 'current' data is stored on disk
+        (in the 'data' directory). This allows any number of users and monitors
+        to view the same consistent data, and run only one set of monitors
+        (unlike some other systems which need a separate monitor for each
+        display).</p>
+        <p>The other diversion from traditional network monitoring packages is
+        the displaying of monitored data using text lines and not a map or other
+        graphical interface. The reason this approach was taken is that in
+        practical experience, a network diagram was always done in some
+        'drawing' tool and the map on the NMS was not updated regularly. Even
+        today, most network/lan diagrams are maintained in a tool such as Visio,
+        and the NMS graphical interface is always a 'second' copy. This and
+        being able to view line based data from any terminal weighed very
+        heavily in favor of a non-graphical user interface.</p>
+        <h4>snipstv (Text based)</h4>
+        <p><strong>snipstv</strong>&nbsp; (snips Text-View) is a simple Unix
+        'curses' based TTY interface. It reads the raw data from disk and
+        formats it for displaying on the screen. It has limited intelligence,
+        and its method of setting an alarm is when it sees a change in the
+        number of 'down' items.</p>
+        <h4>snipsweb (Web)</h4>
+        <p>Originally contributed by a user and now part of the core
+        distribution, this is a Web based frontend to the datafiles. It allows
+        running CGI's and troubleshooting listed events and all the other
+        benefits of a web interface.</p>
+        <p><img src="images/snipsweb.gif" alt="snipsweb.gif" width="609" height="692"></p>
+        <p>This web interface automatically refreshes periodically, plays an
+        audio clip if a device changes its severity level, etc. A 'status'
+        message can be displayed next to each event which is inserted by any
+        valid operator. Users are assigned access levels which controls how much
+        information they can view or edit.</p>
+        <h4>tkSnips (Tcl/Tcl)</h4>
+        <p>This is a client-server application contributed by Lydia Leong. The
+        tkSnips client connects to the <em>ndaemon</em> process on the host
+        system, and displays the snips data in a window. This client can run on
+        any OS that can support Tcl/Tk (PC, Mac, Unix environments).</p>
+        <p><img src="images/tkSnips.gif" alt="tkSnips.gif" width="533" height="532"></p>
+        <p>This interface needs 'tixwish' on the system. Any number of clients
+        can&nbsp; connect to the simple process (<em>ndaemon</em>) running on
+        the snips host which sends data to all the clients periodically. <font color="#FF0000"><em>Currently
+        there is no access control configured on the ndaemon process</em></font>,
+        so this should be protected by a firewall, but this interface can be
+        extended to add these features in the daemon if needed.</p>
+        <hr noshade>
+        <h2><a name="reporting">Reporting</a></h2>
+        <p>The monitors in SNIPS generate an event (logged to the <em>snipslogd</em>
+        logging daemon) only when the severity of a variable <u>changes</u>
+        (i.e. it goes from <em>warning</em> to <em>error</em> or from <em>critical</em>
+        back to <em>info</em>. The thresholds for the various severities are
+        defined by the user, and this tends to reduce the irrelevant data points
+        from the collected data. This threshold triggered event generation&nbsp;
+        allows a monitor to poll a device or variable as frequently as it likes
+        (30 secs, 10 minutes), but it will generate a logging entry only if the
+        variable crosses one of the thresholds.</p>
+        <p>This approach of recording values only when the state changes also
+        reduces the quantity of historical data significantly. Even though some
+        granularity is lost, statistical analysis can easily be done on the
+        collected data by using the time interval that a variable remained in a
+        particular level.</p>
+        <p>'snipslogd' is similar to the Unix 'syslog' process- it allows piping
+        the log message to an external program or writing to a file&nbsp; based
+        on the monitor name. This forms the basis of&nbsp; invoking SMS scripts
+        to do paging, sending email, automated insertion into trouble ticketing
+        systems, auto problem analysis, etc.- the possibilities are virtually
+        unlimited.</p>
+        <p>Currently this system writes to flat files, but the data can easily
+        be piped to a process that writes into a database. Note that the
+        'current' data that the monitors write to disk (the raw data which is
+        displayed by the user interfaces) is overwritten in every pass by the
+        monitor. Hence the size of those files is fixed and does not grow over
+        time.</p>
+        <hr noshade>
+        <h2><a name="futureWork">Future Work</a></h2>
+        <p>The package does not interface to any database, there are some
+        benefits to storing the raw (monitored) and <em>snipslogd</em>
+        historical information in a database such as MySQL, etc. The main
+        advantage is that this would allow retrieving all events for a device or
+        address using an sql query.</p>
+        <p>The monitors should automatically fork into multiple processes if
+        their config file is very large and takes too long to do a single pass.
+        Currently this is a manual process using the '-x' flag or creating
+        symlinks to the monitors with different names.</p>
+        <p>A Java based user interface along the same lines as tkSnips would
+        allow running the display on any platform and one could build a lot of
+        graphing, reporting functionality into the gui itself.</p>
+        <p>Adding dependencies between variables and even devices and supress
+        alarms based on this information would be very useful.</p>
+        <p>In order to make this scalable, it would be useful to allow SNIPS
+        running on different hosts to interact with each other. This is easily
+        doable using the <em>snipslogd</em> daemon, since snipslogd can be
+        enhanced to send an event to remote snipslogd's at other devices. The
+        data can be isolated and&nbsp; referred to using the 'nodename' (or
+        devicename) to prefix the data/events.</p>
+        <hr noshade color="#808080">
+      </td>
+    </tr>
+  </table>
+  </center>
+</div>
+<address>
+  <a href="mailto:vikas@navya.com"><small>Vikas Aggarwal</small></a>
+</address>
+
+</body>
+
+</html>

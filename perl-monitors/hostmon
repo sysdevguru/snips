@@ -1,0 +1,448 @@
+#!/usr/local/bin/perl -w
+#
+# $Header: /home/cvsroot/snips/perl-monitors/hostmon,v 1.2 2008/04/25 23:31:51 tvroon Exp $
+#
+# Server module for 'snmpmon' and hostmon - monitoring hostmon or SNMP data
+# for snips.
+#
+# AUTHOR:  Vikas Aggarwal, vikas@navya.com
+#
+#	Copyright 1994 Vikas Aggarwal, vikas@navya.com
+#
+# No warranty is expressed or implied. Permission to copy and use is
+# extended to all. Permission to redistribute is granted under the
+# following conditions: it is not sold for profit; this copyright
+# notice remains intact; the same permissions extend to the recipient;
+# and if any changes are made, a notice is added so stating.
+
+#####################
+#
+#    This is the 'master' server that processes the data collected by
+#    either hostmon-collector or snmpmon-collector and processes it for
+#    SNIPS.
+#
+#    It can monitor practically any variable that has a numeric value.
+#    Thresholds can be increasing or decreasing (accordingly the event
+#    is flagged if the value exceeds or drops past the thresholds).
+#
+#    Format of the SNMP data file (under TMPDATADIR) that snmpmon parses:
+#	TIME 8765432
+#	DEVICE officeGW
+#	VARIABLE  CISCO.PktsPerSec RATE-min
+#	456 COMMENT Iface_s2
+#	755 COMMENT Iface_e0
+#
+#    Format of the HOSTMON data file:
+#	TIME 8765432
+#	<var> <value> <units> [comment]
+#
+# CAVEATS:
+#    For flexibility, we do NOT have to preconfigure the various
+#    'comment' fields (which are the disk partitions, etc.). The
+#    same variable (DiskSpace) can have multiple entries (one for
+#    each partition). The program can automatically handle newly
+#    added 'comments' (i.e. subdevices) and will start tracking
+#    these new subdevices. If we stop monitoring a subdevice ('comment'
+#    in datafile), then this program flags the data is old after
+#    OLD_AGE secs and finally nulls it from the events file after
+#    EXPIRE_AGE secs. It leaves 'holes' in the datafile, so the
+#    datafile will grow over time as new subdevices are added
+#    and old ones deleted.
+#
+# SNIPS FIELDS:
+#	device.name     	comment from data file if any + device.addr
+#	device.addr	device name/ip read from data file
+#	var.name	variable read from data file
+#	var.units	units from data file
+#
+#
+# STRUCTURES:
+#	@thress = var \t host-regex \t warn \t err \t crit \t comment-regex
+#	%thresindex{$var} = x : y : z   #indexes in the @thress array for $var
+#	%curstat{host var comment}	# value, thres, etc. for event
+#	@devices = list of devices being monitored (from config file)
+#
+# CAVEATS:
+#   Data file and process size will grow over time if new subdevices are
+#   continually added.
+#   Size of the snips data file is pretty large since the number of entries
+#   for each host can be 10-15 depending on number of disk partitions.
+#
+#
+##
+#
+#######
+
+use strict;
+use vars qw ( $snipsroot $debug $TMPDATADIR $OLD_AGE $EXPIRE_AGE
+	      $numtries $varunits $snmpmode
+	      @thress @items @knownvars @devices @childpids
+	      %thresindex %isknownvar %isunknownvar %oldage
+	      %curstat %nodefaultvar %isknownitem %timestamp
+	    );
+
+BEGIN {
+  $snipsroot =  "/usr/local/snips"   unless $snipsroot;	# SET_THIS
+  push (@INC, "$snipsroot/etc"); push (@INC, "$snipsroot/bin");
+  require "snipsperl.conf" ;		# local customizations
+}
+
+use SNIPS;
+
+############################
+## Variables customization #  overrides values in the snipslib.pl library
+############################
+$TMPDATADIR = "/tmp/hostmon_data"; # All host data files under here.
+# $debug = 1;
+    # The sleeptime needs to be larger than the collector's so that
+    # it gets updated fresh data each pass.
+$s_pollinterval=(60*5);		# default sleep time in seconds
+$OLD_AGE = (60*15);		# flag data as old after this secs
+$EXPIRE_AGE = (60*60*2);	# null out the event after this many secs
+$snmpmode = 0;			# default is hostmon mode, 1 if snmpmode
+#########################################
+
+# -d $TMPDATADIR || mkdir($TMPDATADIR, 0700) || die("Cannot create $TMPDATADIR");
+
+select (STDERR); $| = 1; select(STDOUT); $| = 1 ; # make unbuffered
+
+## read configuration file
+##
+#   POLLINTERVAL & STARTHOSTS are keywords.
+#   <variable>  <device regex>  <warn-thres> <err-thres> <crit-thres> <comment>
+#
+sub readconf {
+  my ($startdevices, $i) = (0, 0);
+  my $lineno = 0;
+
+  if ($debug == 0 && $libdebug > 0) {
+    $debug = $libdebug;
+    $libdebug = 1 if ($debug > 1) ;
+  }
+  $s_sender = 'hostmon' if ($s_sender eq "");
+  if ($s_sender =~ /snmpmon/i) { $snmpmode = 1; }
+
+  open(CONFIG,"<$s_configfile")||die("Couldn't find $s_configfile, exiting");
+
+  undef @thress; undef @items ; undef @knownvars; undef @devices;
+  undef %thresindex; undef %isknownvar; undef %isunknownvar;
+  undef %curstat; undef %nodefaultvar; undef %isknownitem; undef %timestamp;
+
+  while (<CONFIG>)
+  {
+    ++$lineno;
+    chomp;
+    if(/^\s*\#/) {next;}   	# skip comments
+    if(/^\s*$/) {next;}		# skip blank lines
+
+    if (/^(sleepinterval)\s+(\d+)\s*$/i || /^(pollinterval)\s+(\d+)\s*$/i) {
+      if ($2 < 60) {$s_pollinterval = $2 * 60;}
+      else {$s_pollinterval = $2; }
+      next;
+    }
+    
+    if (/^\s*RRDTOOL\s+ON/i)  { $SNIPS::dorrd = 1; next; }
+    if (/^\s*RRDTOOL\s+OFF/i) { $SNIPS::dorrd = 0; next; }
+
+    # all other lines are device names after STARTHOSTS
+    # For snmpmon, the format is 'device  snmp_cid  type type type'
+    # but we are only interested in the device name.
+    if ( !$startdevices && (/^STARTHOSTS/i || /^STARTDEVICES/i || /^DEVICES/i))
+    { $startdevices = 1; next ; }
+    if ($startdevices) {
+      if ( /^\s*(\S+)\s*.*$/ )  { push (@devices, $1); }
+      else { print STDERR "[$lineno] Illegal host line $_, skipping\n" ;}
+      next ;
+    }
+
+    # here if reading a variable line (permit -ve values to always fail/match):
+    #	 VAR device-regex  wthres ethres cthres   [reg exp]
+    if ( /^(\S+)\s+(\S+)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)\s*(.*)\s*$/ )
+    {
+      my $re = $2 ;	# temp variable
+      if ($2 eq '*' || $2 eq '+') { $re = '.+' } ; # convert '*' => '.+'
+      push (@thress, "$1\t$re\t$3\t$4\t$5\t$6") ;	# save the thresholds
+      $thresindex{$1} .= "$i:" ; ++$i ;  # save location in @thress array
+      ++$isknownvar{$1};
+      next ;
+    }
+    print STDERR "[$lineno] Bad config line, ignoring- $_\n" ;
+  }		# end: while (CONFIG)
+  close (CONFIG);
+
+  if ($#devices < 0) { die "No devices to monitor, exiting"; }
+  my $datafd = open_datafile($s_datafile, "w");
+  my $event = new_event();
+  my $curtime = time;
+
+  alter_event($event, $s_sender, undef, undef, undef, 'DataAge', 'Secs');
+  foreach my $device (@devices) {
+    alter_event($event, undef, $device, $device, undef, undef, undef);
+    write_event($datafd, $event);
+    push (@items, $device);
+    $timestamp{$device} = $curtime;
+  }
+  close_datafile ($datafd);
+  foreach ( keys %thresindex ) {
+    chop ($thresindex{$_}) ; # delete trailing ':'
+    push(@knownvars, "$_");
+  }
+
+  if ($debug > 1) {	# extended debuggin
+    foreach (keys %thresindex) {
+      print STDERR "(dbg) thresindex{$_}  = $thresindex{$_}\n";
+    }
+  }
+  if ($debug) {
+    print STDERR "(dbg) Total variables in config= ", $#knownvars + 1, "\n" ;
+    print STDERR "(dbg) Configured thresholds are:\n";
+    foreach (0..$#thress) {print STDERR "\t thress[$_] = $thress[$_]\n" ;}
+  }
+}	# readconf ()
+
+## Foreach data line, see which config line it relates to and compare
+# Parse each data file generated by collectors in $TMPDATADIR, and
+# compare with the configured thresholds. This calls do_line() which
+# sets %curstat.
+# When a new 'item' is found, it writes a new event in the data file.
+#
+sub do_devicedatafiles {
+
+  my $datafd = open_datafile($s_datafile, "a");	# append mode for new items
+  my $event = new_event();
+
+  $TMPDATADIR = "/tmp/snmpmon_data" if ($snmpmode);
+  foreach my $device (@devices)
+  {
+    my $hdfile = "$TMPDATADIR/$device";
+    if ($snmpmode) { $hdfile .= ".snmpmon"; }
+    else { $hdfile .= ".hostmon" }
+    my $curtime = 0;		# reset for each datafile.
+    my ($curvar, $curdev, $curunit) = (undef, $device, undef);
+    my ($curvalue, $comment) = (0, "");
+    my $age = time - $timestamp{$curdev};
+    #   (status value threshold maxseverity)
+    $curstat{$curdev} = "0\t$age\t$OLD_AGE\t$E_CRITICAL";	# assume down
+
+    $debug && print STDERR "Doing datafile $hdfile\n";
+    if (!open (DFILE, "< $hdfile")) {	# cannot open for reading
+      print STDERR "ERROR: Could not open $hdfile\n" if $debug;
+      next;	# next device
+    }
+    my $checktimestamp = 1;
+    while (<DFILE>)
+    {
+      chomp;
+      if (/^\s*-+\s*$/ || /^\s*$/ ) {next; } # separators, blank lines
+      if (/^TIME\s+(\d+)/)   { $curtime = $1 ; next; }
+      if (/^DEVICE\s+(\S+)/) { $curdev = $1 ;  next; }	# allow override
+
+
+      if ($checktimestamp) { # need a valid time stamp line
+	if ($curtime == 0) {
+	  $debug &&
+	    print STDERR "[$hdfile]: NO TIMESTAMP FOR DEVICE $curdev\n";
+	  last ;	# next device
+	}
+	elsif ($timestamp{$curdev} == $curtime) {
+	  $debug &&
+	    print STDERR "[$hdfile]: OLD TIMESTAMP $curtime FOR DEVICE $curdev\n";
+	  last ;	# next device
+	}
+	else {
+	  $age = time - $curtime;
+	  $curstat{$curdev} = "1\t$age\t$OLD_AGE\t$E_CRITICAL";	# flag UP
+	}
+	$checktimestamp = 0;
+      }
+
+      # rest should be data lines
+      ($debug > 1) && print STDERR "(dbg) DataLine = $_\n" ;
+      ## for old snmpmon-client  datafile
+      if (/^VARIABLE\s+(\S+)\s+(\S+)\s*$/) {
+	$curvar = $1 ; $curunit = $2 ;
+	next;
+      }
+      ## for old snmpmon-client datafiles
+      if ( /^\s*(\d+)(.*\s+COMMENT\s+(\S.*)?)?$/ ) { # Value & Comment
+	($curvalue, $comment) = ($1, $3);
+        }
+        ## for snmpmon/hostmon-collector  datafiles
+        elsif ( /^\s*(\S+)\s+(\d+)\s+(\S+)(\s+(\S.*)?)?\s*$/ ) {
+        ($curvar, $curvalue, $curunit, $comment) = ($1, $2, substr($3,0,7), $5);
+        $comment = "" if (!defined ($comment));
+        }
+        else {
+	$debug && print STDERR "Error: unknown input data line syntax- $_\n";
+	next;
+      }
+
+      if (! defined( $isknownvar{$curvar}) ) {	# variable not in config file
+	if (! defined($isunknownvar{$curvar}))
+	{	# remember if printed  error msg before
+	  print STDERR "Unknown variable '$curvar' in file $hdfile\n";
+	  ++$isunknownvar{$curvar} ; # print out error msg only once
+	}
+	next;
+      }
+
+      ($debug > 1) &&
+	print STDERR "(dbg) Processing dataline Host= $curdev\n\t",
+         "value= $curvalue, comment= $comment, var= $curvar, unit= $curunit\n";
+
+      # the 'item' should have a blank 'comment' if not available for
+      # matching in doline(), but when written to the event file, replace
+      # blank comment with a '-' in the host.name field.
+      my $ret = &do_line($curdev, $curvar, $curvalue, $comment) ;
+      my $item = "$curdev\t$curvar\t$comment";
+      $timestamp{$item} = $curtime;
+      if ( defined($ret) && !($isknownitem{$item}) ) {	# init new event
+	alter_event($event, $s_sender, $curdev, $curdev,
+		    $comment ? $comment : "", $curvar, $curunit);
+	write_event($datafd, $event);
+	push (@items, $item);	# preserves same order as in events file
+	$isknownitem{$item} = 1;
+      }
+      # reset all variables (not $curdev)
+      ($curvar, $curunit, $curvalue, $comment)= ("", "", 0, "");
+
+    }	# while(DFILE)
+    close (DFILE);
+    if ($curtime != 0) {$timestamp{$curdev} = $curtime;}  # save timestamp
+
+  }	# foreach readdir()
+
+  close_datafile($datafd);	# snips data file
+}	# end: do_devicedatafile()
+
+## 
+#  Match the data line with the regular expressions in the config file.
+#  Stores the variable value, thres, max-severity etc. in %curstat
+#
+sub do_line {
+  my ($curdev, $curvar, $dvalue, $dcomment) = @_ ;
+  my ($status, $thres, $maxsev);
+  my $foundmatch = 0;
+  
+  # now cycle thru the indexes for the variable, and try and match the
+  # dataline's comment with the regular expressions for that variable
+  # as well as the regular expression for the host (read from config file).
+  # No regular expression in the comment field serves as a 'default'.
+  # Stop after the first match.
+  
+  # $debug && print STDERR "(dbg)thresindex{$curvar}= $thresindex{$curvar}\n";
+  foreach my $i ( split(/[:\n]/, $thresindex{$curvar}) ) {
+    my ($junk, $device_regex, $t1,$t2,$t3, $comment_regex) = 
+      split (/\t/, $thress[$i]);
+    #	$debug && print STDERR "(dbg) check if thress[$i] = $thress[$i]\n";
+    if (($curdev =~ m!$device_regex!i)  && 
+	($comment_regex eq '' || $dcomment =~ m!$comment_regex!i) )
+    {
+      ($debug > 1) && 
+	print STDERR "(dbg) Matched- thress[$i], $thress[$i]\n";
+      my $sev = undef;
+      # if Negative Threshold, reset to 0
+      if ($t1 < 0) {$sev = $E_ERROR; $t1 = 0;}
+      if ($t3 < 0) {$sev = $E_ERROR; $t3 = 0;}
+      if ($t2 < 0) {$sev = $E_WARNING; $t2 = 0; }
+      ($status, $thres, $maxsev)= calc_status ($dvalue, $t1, $t2, $t3);
+      $maxsev = $sev if (defined $sev);
+      $curstat{"$curdev\t$curvar\t$dcomment"} =
+	 "$status\t$dvalue\t$thres\t$maxsev";
+      ++$foundmatch ;
+      last ;			# dont search anymore patterns of foreach()
+    }
+  }	# foreach()
+
+  if (! $foundmatch) {		# print a warning
+    if (! $nodefaultvar{$curvar}) { # warning first time only
+      print STDERR "do_line: ERROR- no 'default' config for $curvar\n";
+      ++$nodefaultvar{$curvar};
+    }
+    return undef;
+  }				# end foreach (list of values)
+
+  return 1;
+}	# end: do_line()
+
+
+##
+# Writes out the snips datafile. Called by snips_main()
+sub dopoll {
+
+  my $event;
+  my $nullevent = new_event();
+  my $count = -1;
+
+  alter_event($nullevent, '', '', '', '', '', '');
+  # this following function also writes out new uninitialized events
+  # to the snips datafile
+  &do_devicedatafiles();	# saves all values in %curstat
+
+  my $datafd = open_datafile($s_datafile, "r+");	# read + write
+  my $curtime = time;
+
+  while ( ($event = read_event($datafd)) )
+  {
+    ++$count;
+    my $item = $items[$count];	# this array is in same order as datafile
+    if (! defined ($curstat{$item})) {
+      print STDERR "Programming ERROR- curstat{$item} is undefined\n";
+      next;
+    }
+    $timestamp{$item} = 0 if (! defined($timestamp{$item}) );
+    my $age = $curtime - $timestamp{$item};
+    # print STDERR "Age for $item is $age secs\n";
+
+    # Previous code used alter_event to blank fields in the record for
+    # this event.  This code uses the NODIPLAY flag in the state field
+    # of the event instead.
+    if ($age >= $EXPIRE_AGE) {
+      if (! defined ($oldage{$item}) || $oldage{$item} < 2) {
+      my %event = unpack_event($event);
+      $event{state} = $event{state} | $n_NODISPLAY;
+      $event = pack_event(%event);
+      $oldage{$item} = 2;
+      }
+      my ($status,$value,$thres,$maxseverity) = split(/\t/, $curstat{$item});
+      update_event($event, 0, $value, $thres, $maxseverity);# escalate severity
+      rewrite_event($datafd, $event);
+      next;
+    } # age > $EXPIRE_AGE
+    if ($age >= $OLD_AGE) {
+      if (! defined ($oldage{$item})) {
+	my %event = unpack_event($event);
+	$event{state} = $event{state} | $n_OLDDATA;
+	$event = pack_event(%event);
+	$oldage{$item} = 1;
+      }
+      my ($status,$value,$thres,$maxseverity) = split(/\t/, $curstat{$item});
+      update_event($event, 0, $value, $thres, $maxseverity);# escalate severity
+      rewrite_event($datafd, $event);
+      next;
+    }	# age > $OLD_AGE
+    if (defined $oldage{$item}) {
+      my %event = unpack_event($event);
+      $event{state} = $event{state} & (~$n_OLDDATA);
+      if ($oldage{$item} == 2) {
+        $event{state} = $event{state} & (~$n_NODISPLAY);
+      }
+      $event = pack_event(%event);
+      undef $oldage{$item};
+    }
+    my ($status, $value, $thres, $maxseverity) = split(/\t/, $curstat{$item});
+    update_event($event, $status, $value, $thres, $maxseverity);
+    rewrite_event($datafd, $event);
+  }
+
+  close_datafile($datafd);
+
+  return 1;
+}	# dopoll()
+
+###
+### main
+###
+
+&snips_main(\&readconf, \&dopoll, undef);
+

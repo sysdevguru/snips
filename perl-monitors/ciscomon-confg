@@ -1,0 +1,25 @@
+## sample config file for ciscomon.
+#
+# Cisco Monitoring configuration
+#
+# Keywords are:
+#
+#	cpuusage
+#	airflow
+#	inlet
+#	v+12  (12volt)
+#	memory
+#
+##
+# used here to monitor the Computer Room temperature.
+#
+DEFAULT  defaultPassword
+	inlet	30 40 50
+	cpuusage  60 70 80
+
+CompCisco      137.157.46.253
+	inlet   15 25 30
+
+BBCisco 	129.1.2.4  bbCiscoPassword
+	cpuusage  50 60 70
+	inlet

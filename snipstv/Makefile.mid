@@ -1,0 +1,35 @@
+# $Header: /home/cvsroot/snips/snipstv/Makefile.mid,v 1.0 2001/07/17 03:25:23 vikas Exp $
+#
+# Makefile for SNIPS TextView (snipstv)
+#
+# 
+# The HELPFILE is placed in the ETCDIR
+
+CURSESLIB =	@CURSESLIB@
+
+# Program specific compilation flags and libraries
+PROGCDEFS =	-DDATADIR=\"$(DATADIR)\" -DMSGSDIR=\"$(MSGSDIR)\"
+PROGLIBS =	$(CURSESLIB)
+
+TARG =	snipstv
+OBJS = 	create_subwins.o do_filter.o help_page.o init.o main.o \
+	parse_user_input.o update_eventwin.o  update_msgtitle.o  \
+	update_msgwin.o  update_promptwin.o update_title.o
+
+$(TARG):	$(OBJS) Makefile
+	$(CC) $(CFLAGS) $(OBJS) $(LIBS) $(PROGLIBS) -o $@
+
+install:   installdir  $(TARG)
+	$(INSTALL) $(INSTALLFLAGS) -c -m 751 $(TARG) $(BINDIR)
+	[ -r $(BINDIR)/netconsole ] || ln -s $(BINDIR)/$(TARG) $(BINDIR)/netconsole
+	$(INSTALL) $(INSTALLFLAGS) -c -m 0444 snipstv-help $(ETCDIR)
+
+clean:
+	rm -f $(DIRT) filter
+
+rcs:
+	@echo "Doing 'rcs' in $(TARG)"
+	@-for i in $(OBJS); do \
+		$(CO) -q `basename $$i .o`.c ;\
+	  done
+

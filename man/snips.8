@@ -1,0 +1,249 @@
+.\" $Header: /home/cvsroot/snips/man/snips.8,v 1.0 2001/07/08 22:31:48 vikas Exp $
+.\"
+.TH SNIPS-OVERVIEW 8 "June 2001"
+.SH NAME
+snips \- 
+.I Systems & Network Integrated Polling (monitoring) Software
+.SH SYNOPSIS
+This is an overview of the SNIPS software. See the 
+.I SEE ALSO
+section for additional SNIPS program, and the HTML documentation for more
+up to date and complete documentation on SNIPS.
+.SH DESCRIPTION
+.LP
+.B SNIPS
+is a system and network monitoring package that run on Unix platforms. It has 
+a large number of monitors such as:
+.RS
+.nf
+ - IP ICMP monitor (using IP 'ping' or 'multiping')
+ - OSI reachability monitor (using OSI ping)
+ - RPC portmapper monitor (using 'rpcping')
+ - TCP port reachability monitor
+ - Ethernet load (bandwidth & pps)
+ - Unix host performance (disks, memory, swap, load, nfs, collisions)
+ - SNMP variables monitor (RMON, Cisco router, terminal server)
+ - Nameserver (named)
+ - Network Time Protocol (NTP) stratum
+ - SNMP traps
+ - BGP peer status
+ - TCP data throughput
+ - Usage of terminal server modem lines (busy lines)
+ - Appletalk route monitor (for cisco routers)
+ - Novell service monitor
+.fi
+.RE
+The software is extensible and new monitors can be added easily to the
+package. A large number of the monitors are user contributed.
+.PP
+The software consists of a number of monitoring agents that poll various
+parameters (from any system or device) and write the output in a common
+format suitable for post-processing by a number of agents (such as display,
+logging, notification, automated troubleshooting, etc.).
+.PP
+All data collected by the monitoring agents follows a fixed (non-readable)
+format. Each data entry is termed an
+.I event
+in SNIPS, and each event has certain flags and a
+.I severity
+level associated with it. 
+The display agents
+.IR snipstv (1)
+or
+.IR snipsweb
+display the output of these monitoring agents depending on the severity
+of the event.
+This design allows running just one set of monitoring agents and
+.I any
+number of display agents, and all of the displays process and display
+the same consistent set of data.
+.PP
+There are four levels of 
+.I severity
+associated with an event- CRITICAL, ERROR, WARNING and INFO. The severity
+level is controlled independently by the monitoring agents, and the decision
+to raise or set an event's severity to any level depends on the logic
+imbedded in the monitoring agent. The intent is that an event is gradually
+escalated to its maximum allowed severity level and thus prevent false alarms.
+.PP
+As an example, for the 
+.BR ippingmon (8)
+monitor, if a device is unreachable via
+.IR ICMP-ping ,
+it would be assigned a severity of WARNING by ippingmon, which would then 
+escalate to ERROR and then to CRITICAL if the device is still unreachable after 
+two more test passes (and if the respective  thresholds for packet loss are
+exceeded).
+In the case of
+.BR trapmon (8),
+an SNMP trap message of
+.I EGP neighbor lost
+would be directly assigned a severity level of CRITICAL, while an 
+.I Warm Start
+trap is directly assigned a severity of WARNING.
+Similarly
+.BR hostmon (8)
+has three thresholds associated with each variable, and the maximum severity
+of an event depends on the threshold exceeded.
+.PP
+The display agent (and other data post-processors) use this event
+severity to decide whether to display it (or troubleshoot/log it) depending
+on the selected severity level.
+.PP
+The software is flexible and modular, which allows enhancements and 
+development with a minimum amount of effort. 
+The post-processor modules process all data files present in the DATA
+directory sequentially. This allows new monitoring programs to simply start
+generating data in the data directory and the post-processors will
+automatically start displaying or processing the new data.
+
+.SH CURRENT MODULES
+The SNIPS package presently consists of the following modules:
+.TP
+.B snipstv
+which is an Event display program for ascii text terminals. It uses the Unix
+.I curses
+screen management system to support a wide variety of terminal types. The
+criterion for displaying an event is:
+.RS
+.TP 3
+1.
+Severity level of the \fIevent\fR is higher than the severity level set in
+the \fIdisplay\fR.
+.TP 3
+2.
+The display filter (if set) matches some string in the event line.
+.RE
+.IP
+The display can be in regular 80 column mode or in extended 132 column mode.
+Critical events are displayed in reverse video (if the terminal type supports
+it). Additional features like displaying informational
+messages in a part of the window, automatic resizing window sizes, operator
+acknowledgement via a bell when a new event goes critical are also available.
+.\"----------------
+.TP
+.B ippingmon
+which monitors the reachability of a device via "ICMP" ping packets.
+This program can use the default output from the system's 
+.I ping
+program, but an accompanying program (
+.IR multiping )
+can ping multiple IP devices at the same time and is preferable for monitoring
+a large list of devices.
+A device is marked down if the number of lost packets exceeds the packet loss
+thresholds set in the config file, and the severity is escalated (to the max
+level for the packet loss) in each pass.
+.TP
+.I rpcpingmon
+to monitor Unix hosts that have an RPC portmapper running instead of using
+ippingmon (since testing the RPC portmapper is more useful on Unix hosts).
+.\" ***
+.TP
+.B osipingmon
+which is similar to the 
+.I ippingmon
+monitor but uses the OSI \fIping\fR program instead. No 'multiping'
+for OSI devices has been developed at this time. The only requirement is that
+the system's OSI \fIping\fR program output match the typical BSD IP ping
+program's output.
+.\" ***
+.TP
+.B etherload
+which monitors the network traffic and packets-per-second on ethernets; if
+the bandwidth utilization or pps exceeds the set thresholds, it escalates
+the severity of the event.
+.\" ***
+.TP
+.B nsmon
+monitors nameservers (
+.IR named )
+on the list of specified hosts. It periodically sends an SOA query for the
+specified domain.
+.\" ***
+.TP
+.B ntpmon
+This monitors NTP stratum for configured devices and flags them as down if
+the stratum drops below the specified levels.
+.\" ***
+.TP
+.B tpmon
+For monitoring the throughput (kbits per second) to a list of hosts. The
+program connects to the discard socket on the remote machine (using a STREAM
+socket) and sends large packets for a small amount of time to evaluate the
+effective end-to-end throughput. It elevates a device to WARNING level if the
+throughput drops below a certain threshold (set in the configuration file).
+.\" ***
+.TP
+.B trapmon
+Converts all SNMP traps into a format suitable for displaying using SNIPS.
+The severity of the various traps is preset (and can be changed during
+compilation time).
+.\" ***
+.TP
+.B snipslogd
+This is the SNIPS logging daemon. It listens on a UDP port for the various
+monitors to log events to it. It then writes out the event (in text line
+format), to various log files specified in a configuration file. Alternatively,
+it can pipe the text line to a program specified in the config file (this
+facilitates automatic notification, troubleshooting, etc.).
+.\" ***
+.TP
+.B eventselect
+This program parses all the SNIPS datafiles specified on the command line
+and extracts those events that match the criterion specified on the
+command line. The events can be selected by sender name, severity, time
+or variable name. This process can be run periodically from the 
+.IR cron (1)
+and be used to do any postprocessing (sending email, page
+someone)  if a device is in critical state for a period of time, etc.
+.\" ***
+.TP
+.B snips-perl
+This is a Perl interface to write additional SNIPS monitors using
+.I snipslib.pl
+Monitors for RMON, cisco router variables, Novell routes, 
+appletalk routes,  bootp servers, modem line usage on terminal-servers
+have been developed/contributed and included in the distribution. These might 
+require slight customizations for your environment.
+.RS
+.IP armon
+Monitor missing or unregistered Appletalk routes on a Cisco router.
+.IP bgpmon
+Check the status of a BGP peer on a cisco router.
+.IP bpmon
+Check the status of a bootp daemon (using bootptest or bootpquery).
+.IP hostmon
+A distributed host monitoring system for disks, memory, load, swap space,
+nfs, etc. Consists of a client program that runs on all the remote machines
+and a server program that connects to the clients and gathers+processes the
+data from the clients and writes into the SNIPS format.
+.IP modemmon
+Monitors the number of free modem lines on a terminal server and indicates an
+error when the number of free lines drops below the defined thresholds.
+.IP novellmon
+Checks for missing or unregistered Novell \fIservices\fR on a Cisco router.
+.IP nrmon
+Checks for missing or unregistered Novell \fIroutes\fR.
+.IP snmpmon/snmpgeneric
+Uses the CMU-SNMP \fBsnmpwalk\fR program to monitor SNMP statistics such as
+RMON mib, traffic load, router packet & error rates, cisco router interface
+variables, terminal server busy lines, etc.
+.IP sqlmon
+Uses the Perl DBI interface to make SQL queries from a database and see if it 
+is up and running.
+.RE
+See
+.IR snips-perl (8)
+for adding new monitors and programming using this PERL interface.
+.\"--------------------------------------------
+.SH ADDITIONAL DOCUMENTATION
+See the HTML documentation provided with the software for detailed and more
+up to date information.
+.LP
+To be added to the SNIPS mailing list (for future updates and bug fixes),
+send a message to
+.br
+.B snips\-users\-request\@navya.com
+with your email address.
+.SH COPYRIGHT
+See the file \fICOPYRIGHT\fR for full COPYRIGHT details.

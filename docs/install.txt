@@ -1,0 +1,1 @@
+See ../INSTALL file (in source directory).

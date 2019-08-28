@@ -1,0 +1,6 @@
+		       DEV NOTES for snipslogd
+
+1. Define a 'site name' for all messages sent from this host to
+   another snipslogd.
+
+2. Permit logging to another snipslogd using '@host.abc.org'

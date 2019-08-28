@@ -1,0 +1,855 @@
+#!/usr/local/bin/perl -w
+# $Header: /home/cvsroot/snips/perl-monitors/snmpmon-collector,v 1.5 2003/08/05 19:35:23 russell Exp $
+#
+#	snmpmon-collector - perl client for SNIPS to monitor agents via SNMP
+#
+# SEE 'snmpgeneric' for another snmp monitor. This program collects all
+# the snmp data from the various devices and stores it in /tmp/snmpmon_data.
+# 'snmpmon' then processes this data.
+#
+# AUTHOR:
+#	Vikas Aggarwal, vikas@navya.com
+#
+#	Copyright 1994-2001, Netplex Technologies, Inc.
+#
+#
+# Changes by Darin Davis (Jan 2002):
+#
+# - added numerous debug statements (debug level 3) and some code comments
+#   changed '@devicelist' to '@devices' in script header documentation
+# - changed first debug statement in procdata_router from
+#   'Running procdata_cisco_router' to 'Running procdata_router'
+# - changed 'if' to 'elsif' on match for ifSpeed in procdata_router()
+# - commented out 'print "VARIABLE $varalias VALUE\n" in procdata_router()
+#   (doesn't belong in /tmp/snmpmon/*.snmpmon files)
+# - added test for non-positive ifSpeed in procdata_router(); without it,
+#   division by zero errors occur on tunl0 and ppp0 interfaces
+######
+# Program to poll SNMP variables from various devices. Needs configuration
+# data for the format:
+#	# DEVICE   cid   type [ type type ... ]
+#
+#	ctron-res	public  rmon
+#	cs500		public  cisco_ts
+#	trillian	public  cisco_router rmon
+#
+# The config file read is 'snmpmon-confg', and all config commands
+# before the keyword STARTDEVICES are ignored.
+#
+# This program gathers data from remote SNMP devices using the CMU snmpwalk
+# program. Each device is assigned to one or more categories, and a
+# pre-defined set of data is gathered for each category. The output is
+# then processed by the 'snmpmon' program for SNIPS output.
+#
+###
+# VARIABLES USED:
+#
+# Each device belongs to one or more 'types' (where the types are defined
+# in @devicetypes such as router, host, rmon). The list of variables to
+# monitor are preset for each 'type', and any custom data parsing is done
+# for each 'type'.
+#
+#	@devices		list of devices to monitor
+#	%typevars{$type}	list of SNMP variables for each TYPE
+#	%devvars{$device}	list of SNMP variables for each DEVICE
+#	%nvarval{$var}		current values for device being monitored
+#	%prev_varval{$dev, $var}	previous monitored values for a device
+#				and corresponding variable.
+#				Each point in this matrix is a string
+#				of values.
+#
+# Customization:
+#
+#       Edit '$ping' and its usage for properly 'pinging' a device in main()
+#	Also fix the location of the CMU snmpwalk program and the location
+#	of the MIB file (both are supplied with the snips sources).
+
+use strict;
+use vars qw ( $snipsroot $etcdir $bindir $snmpget $snmpwalk $mibfile
+	      $debug $ping $prognm $sleeptime $TMPDATADIR $cfile $tfile
+	      $testtime $ostype
+	      $MIB2 $MIBENTERPRISE $MIBRMON $MIBCISCO $MIBCTRON
+	      $MIBEMPIRE $MIBHOSTRESOURCES
+	      @devicetypes @devices 
+	      %typevars %prevtime %nvarval %prev_varval %devvars %cid 
+	      %istype %isdevtypes %mibalias
+	    );
+
+BEGIN {
+  $snipsroot =   "/usr/local/snips"    unless $snipsroot;	# SET_THIS
+  push (@INC, "$snipsroot/etc"); push (@INC, "$snipsroot/bin");
+  require "snipsperl.conf" ;		# local customizations
+}
+############################
+## Variables customization #  overrides values in the snipslib.pl library
+############################
+				# All host data files under here.
+$TMPDATADIR  = "/tmp/snmpmon_data" unless $TMPDATADIR;
+$etcdir  = "$snipsroot/etc"  unless $etcdir;	# location of config file
+$bindir  = "$snipsroot/bin"  unless $bindir;
+
+$ping =   "/bin/ping"   unless $ping;		# SET_THIS to ping location
+$snmpget  = "$bindir/snmpget" unless $snmpget ;	# location of snmpget
+$snmpwalk = "$bindir/snmpwalk" unless $snmpwalk;# location of snmpwalk
+#$mibfile = "$etcdir/mibII.txt" ;	# location of MIB file SET_THIS
+$mibfile = "$etcdir/mib-v2.txt" ;	# location of MIB file SET_THIS
+$ENV{"MIBFILE"}= $mibfile ;
+$ENV{"MIBFILE_v2"}= $mibfile ;
+
+$debug = 0;				# set to 1, 2 or 3 for debugging output
+$prognm = $0;				# save program name
+$sleeptime = 10 ;			# in seconds
+
+##########################
+
+if (!$ping) {$ping = `which ping` ; chomp $ping; }
+
+$tfile = "$TMPDATADIR" . "/snmpmon.$$" ;	# temp file
+$cfile = "$etcdir/snmpmon-confg" ;
+
+#########
+-d $TMPDATADIR || mkdir($TMPDATADIR, 0700) || die("Cannot create $TMPDATADIR");
+-w $TMPDATADIR || die("Cannot write to $TMPDATADIR");
+-f $mibfile || die("Could not find MIB file $mibfile, exiting");
+-x $snmpwalk || die("Could not find executable $snmpwalk, exiting");
+if ($ping =~ m|^/|) {-x $ping || die("Cannot find $ping, exiting"); }
+
+## list of known devices. There has to be a corresponding function
+#  for each of these routines (called init_$devname).
+@devicetypes = qw(system rmon router cisco_router cisco_ts
+		  host
+		 ) ;
+%mibalias = (
+	     'system', 'SYS',
+	     'rmon', 'RMON',
+	     'router', 'RTR',
+	     'cisco_router', 'CISCO',
+	     'cisco_ts', 'CISCO',
+	     'empire_unix', 'EMPIRE',
+	     'host', 'HOST'
+	    );
+
+#####  MIB aliases
+$MIB2 = ".iso.org.dod.internet.mgmt.mib-2" ;
+#$MIB2 = ".1.3.6.1.2.1" ;
+$MIBENTERPRISE = ".iso.org.dod.internet.private.enterprises" ;
+#$MIBENTERPRISE = ".1.3.6.1.4.1"
+$MIBRMON = "$MIB2.rmon" ;
+#$MIBRMON = "$MIB2.16" ;
+$MIBCISCO = "$MIBENTERPRISE.Cisco" ;	# or .9
+$MIBCTRON = "$MIBENTERPRISE.cabletron" ;
+
+## Empire mib for systems (see http://www.empire.com)
+$MIBEMPIRE = "$MIBENTERPRISE.546";
+
+$MIBHOSTRESOURCES = "$MIB2.25";	# RFC 1514 (Host Resources)
+
+#####  init_$type  routines
+sub init_system {
+  my $idx = "system" ;
+  my $prefix = "$MIB2.system";
+  my @lvars = qw(sysUpTime);
+  
+  $debug && print STDERR "(debug) Running init_system\n";
+  foreach my $i (@lvars) { push ( @{$typevars{$idx}}, "$prefix.$i" ); }
+  
+}				# end init_system()
+
+sub init_rmon {
+  my $idx = "rmon" ;
+  my $prefix = "$MIBRMON.statistics.etherStatsTable.etherStatsEntry";
+  my @lvars = qw(etherStatsOctets etherStatsPkts
+	       etherStatsCRCAlignErrors
+	       etherStatsUndersizePkts etherStatsOversizePkts
+	       etherStatsCollisions) ;
+
+  $debug && print STDERR "(debug) Running init_rmon\n";
+  foreach my $i (@lvars) { push ( @{$typevars{$idx}}, "$prefix.$i" ); }
+
+}				# end init_rmon()
+
+
+sub init_router {
+  my $idx = "router" ;
+  my $prefix = "$MIB2.interfaces.ifTable.ifEntry" ;
+  my @lvars = qw(ifDescr  ifSpeed ifOutQLen
+	       ifInOctets  ifInUcastPkts ifOutOctets ifOutUcastPkts
+	       ifInErrors ifOutErrors);
+
+  $debug && print STDERR "(debug) Running init_router\n";
+  foreach my $i (@lvars) { push ( @{$typevars{$idx}}, "$prefix.$i" ); }
+}
+
+sub init_cisco_router {
+  my $idx = "cisco_router" ;
+  my $prefix = "$MIBCISCO.local.linterfaces.lifTable.lifEntry";
+  my @lvars = qw(locIfCarTrans locIfCollisions locIfInAbort
+	       locIfInCRC locIfInRunts locIfResets locIfReliab);
+
+  $debug && print STDERR "(debug) Running init_cisco_router\n";
+  foreach my $i (@lvars) { push ( @{$typevars{$idx}}, "$prefix.$i" ); }
+}
+
+sub init_cisco_ts {
+  my $idx = "cisco_ts" ;
+  my $prefix = "$MIBCISCO.local.lts.ltsLineTable.ltsLineEntry";
+  my @lvars = qw(tsLineActive tsLineType);
+
+  $debug && print STDERR "(debug) Running init_cisco_ts\n";
+  foreach my $i (@lvars) { push ( @{$typevars{$idx}}, "$prefix.$i" ); }
+}
+
+# RFC 1514
+sub init_host {
+  my $idx = "host";
+  my $prefix = "$MIBHOSTRESOURCES";
+  # .1.1 = hrSystemUptime    .1.6 = hrSystemProcesses  .1.7 = hrMaxProcesses
+  # .2.3.1.[3456] = info on memory, disk, etc.
+  # .3.3.1 = cpu number and %-busy over past 1 minute
+  my @lvars = qw(1.1 1.6 1.7 2.3.1.3 2.3.1.4 2.3.1.5 2.3.1.6 3.3.1);
+
+  $debug && print STDERR "(debug) Running init_host\n";
+  foreach my $i (@lvars) { push ( @{$typevars{$idx}}, "$prefix.$i" ); }
+}
+
+## Empire agent (www.empire.com)
+sub init_empire_unix {
+  my $idx = "empire_unix" ;
+  my $prefix = "$MIBEMPIRE.1";
+  my @lvars = qw();
+
+  $debug && print STDERR "(debug) Running init_empire_unix\n";
+  foreach my $i (@lvars) { push ( @{$typevars{$idx}}, "$prefix.$i" ); }
+}
+
+
+############################################################################
+
+#####
+#####  procdata_$type
+#####
+
+##
+# Print out values of monitored system variables...
+sub procdata_system {
+  my ($dev) = @_ ;
+  my ($prevtime, $var);
+  my $d = &toindex($dev);
+  my $dtime = $testtime - $prevtime{$d};
+
+  $debug && 
+    print STDERR "(debug) Running procdata_system for device $dev\n";
+  foreach my $var ( @{$typevars{"system"}} ) {
+    my $v = &toindex($var) ;
+    my ($varalias) = ( $var =~ /^.*(\.[^.]+)$/ ) ;
+    $varalias = $mibalias{"system"} . $varalias ;
+
+    next if (! defined(@{$nvarval{$v}}) );
+
+    if ($var =~ /sysUpTime/) {	#  (844388487) 97 days, 17:31:24
+      my ($upsecs) = (@{$nvarval{$v}}[0] =~ /^\s*\((\d+)\)\s*/ );
+      # convert TICKS into secs
+      printf "$varalias %d VALUE\n", int($upsecs / 100) ;
+    }
+    else {
+      foreach ( @{$nvarval{$v}} ) {
+	print "$varalias $_ VALUE\n" ;
+      }
+    }
+    @{$prev_varval{$d, $v}} = @{$nvarval{$v}} ; # store new values
+  }	# foreach
+}
+
+##
+# Monitor collisions, etc per sec.
+
+sub procdata_rmon {
+  my ($dev) = @_ ;
+  my ($prevtime, $var, $i);
+  my $d = &toindex($dev);	# strip off hyphens,  etc.
+  my $dtime = $testtime - $prevtime{$d};
+
+  $debug &&
+    print STDERR "(debug) Running procdata_rmon for device $dev\n";
+  foreach my $var ( @{$typevars{"rmon"}} ) {
+    my $v = &toindex($var) ;
+    next if (! defined(@{$nvarval{$v}}) );
+    if (! defined(@{$prev_varval{$d,$v}}) ) {	# store prev val first
+      @{$prev_varval{$d, $v}} = @{$nvarval{$v}} ; # store new values
+      next;
+    }
+
+    my @deltaval =
+      &vector_calc(\@{$nvarval{$v}} , "-" , \@{$prev_varval{$d,$v}} );
+
+    if ($#deltaval >= 0)
+    {
+      my @deltarate = &vector_calc(\@deltaval, "/", \$dtime);
+
+      # shorten the prefix
+      my ($varalias) = ( $var =~ /^.*(\.[^.]+)$/ ) ;
+      $varalias = $mibalias{rmon} . $varalias ;
+      my $i = 0;
+      foreach (@deltarate) {
+	++$i; 
+	print "$varalias $_ RATE-sec Net_$i\n" ;
+      }
+      if ($var =~ /Octets/)	# extract bandwidth utilized
+      {
+	$i = 0;
+	$varalias =~ s/Octets/BW/ ;
+	foreach (@deltarate) {
+	  ++$i;
+	  printf "$varalias %d VALUE Net_$i\n",
+	  int(($_ * 8 * 100) / 10000000); # percentage Mbits per sec
+	}
+      }
+    }
+    #	else { $debug && print STDERR "Varying array lengths, skipping ...\n" }
+
+    @{$prev_varval{$d, $v}} = @{$nvarval{$v}} ; # store new values
+
+  }	# end:  foreach($var)
+}	# sub procdata_rmon()
+
+##
+# Monitor errors, packet rate, bandwidth utilization
+
+sub procdata_router {
+  my ($dev) = @_ ;
+  my ($prevtime, $var);
+  my $d = &toindex($dev);
+  my $dtime = $testtime - $prevtime{$d};
+  my (@ifDescr, @ifSpeed) = (undef, undef);
+
+  $debug && 
+    print STDERR "procdata_router: device: $dev\n";
+  ($debug>2) && print STDERR "procdata_router: prevtime{$d}, testtime: $prevtime{$d}, $testtime\n";
+
+					# for each router MIB var
+  foreach my $var ( @{$typevars{"router"}} ) {
+    my $v = &toindex($var) ;
+
+    ($debug>2) && print STDERR "procdata_router: var: $var\n";
+    next if (! defined(@{$nvarval{$v}}) );
+    ($debug>2) && print STDERR "procdata_router: v: $v\n";
+
+    # Print values for some variables, deltas for some...
+
+					# don't write out ifDescr or ifSpeed
+    if ($var =~ /ifDescr/) {@ifDescr = @{$nvarval{$v}} ;}
+    elsif ($var =~ /ifSpeed/) {@ifSpeed = @{$nvarval{$v}} ;}
+
+					# write ifOutQLen for each interface
+    elsif ($var =~ /ifOutQLen/) # need value, not rate
+    {
+					# behead everything up to '.ifOutQLen'
+      my ($varalias) = ( $var =~ /^.*(\.[^.]+)$/ ) ;
+      $varalias = $mibalias{router} . $varalias ;
+					# ASSERT: varalias = RTR.ifOutQLen
+      ($debug>2) && print STDERR "procdata_router: varalias: $varalias\n";
+      my $i = 0;
+      foreach ( @{$nvarval{$v}} ) {
+	print "$varalias $_ VALUE $ifDescr[$i++]\n" ;
+      }
+    }
+
+    elsif ($var =~ /Octets|Pkts|Errors/) # extract rates
+    {
+      if (! defined(@{$prev_varval{$d,$v}}) ) {	# store prev val first
+	@{$prev_varval{$d, $v}} = @{$nvarval{$v}} ; # store new values
+	next;
+      }
+      ($debug>2) && print STDERR "procdata_router: var: $var\n";
+
+					# subtract old values from new values
+      my @deltaval =
+	&vector_calc( \@{$nvarval{$v}} , "-" , \@{$prev_varval{$d,$v}} );
+
+      if ($#deltaval >= 0)
+      {
+        ($debug>2) && print STDERR "procdata_router: dtime: $dtime\n";
+	my @deltarate =  &vector_calc(\@deltaval, "/", \$dtime);
+	
+	# shorten the prefix
+	my ($varalias) = ( $var =~ /^.*(\.[^.]+)$/ ) ;
+	$varalias = $mibalias{router} . $varalias ;
+        ($debug>2) && print STDERR "procdata_router: varalias: $varalias\n";
+	my $i = 0;
+	foreach (@deltarate) {
+          ($debug>2) && print STDERR "$varalias $_ RATE-sec $ifDescr[$i]\n";
+	  print "$varalias $_ RATE-sec $ifDescr[$i++]\n";
+	}
+	if ($var =~ /Octets/)	# extract bandwidth utilized
+	{
+	  $i = 0;
+	  $varalias =~ s/Octets/BW/;
+	  #print "VARIABLE $varalias VALUE\n";
+          ($debug>2) && print STDERR "VARIABLE $varalias VALUE\n";
+	  foreach (@deltarate) {
+	    if ($ifSpeed[$i] > 0) {	# calc percentage util
+	      printf "$varalias %d VALUE $ifDescr[$i]\n",
+	        int(($_ * 8 * 100) / $ifSpeed[$i++]);
+	    } else {			# can't div by 0; "util" = ifSpeed
+	      printf "$varalias %d VALUE $ifDescr[$i]\n", $ifSpeed[$i++];
+	    }
+	  }
+	}
+      }				# end if(size != 0)
+      else { ($debug>2) &&
+	print STDERR "procdata_router: last element of deltaval: $#deltaval\n"}
+    }
+    else { ($debug>2) &&
+	print STDERR "procdata_router: unknown var: $var\n"}
+
+    @{$prev_varval{$d, $v}} = @{$nvarval{$v}} ; # store new values
+
+  }	# foreach $var
+}
+
+##
+# Monitor reliability of interfaces, error rate
+
+sub procdata_cisco_router {
+  my ($dev) = @_ ;
+  my ($prevtime, $var);
+  my $d = &toindex($dev);
+  my $dtime = $testtime - $prevtime{$d};
+  my $i;
+
+  $debug && 
+    print STDERR "(debug) Running procdata_cisco_router for device $dev\n";
+  foreach my $var ( @{$typevars{"cisco_router"}} ) {
+    my $v = &toindex($var) ;
+
+    next if (! defined(@{$nvarval{$v}}) );
+
+    if ($var =~ /IfReliab/)	# no deltas for interface reliability
+    {
+      my ($varalias) = ( $var =~ /^.*(\.[^.]+)$/ ) ;
+      $varalias = $mibalias{cisco_router} . $varalias ;
+      $i = 0;
+      foreach ( @{$nvarval{$v}} ) {
+	++$i;
+	print "$varalias $_ VALUE Iface_$i\n" ;
+      }
+    }
+    else			# extract rates
+    {
+      if (! defined(@{$prev_varval{$d,$v}}) ) {	# store prev val first
+	@{$prev_varval{$d, $v}} = @{$nvarval{$v}} ; # store new values
+	next;
+      }
+      my @deltaval =
+	&vector_calc( \@{$nvarval{$v}} , "-" , \@{$prev_varval{$d,$v}} );
+
+      if ($#deltaval >= 0)
+      {
+	$dtime = ($dtime / 60); # use minutes for small incr values
+	my @deltarate = &vector_calc(\@deltaval, "/", \$dtime);
+	
+	# shorten the prefix
+	my ($varalias) = ( $var =~ /^.*(\.[^.]+)$/ ) ;
+	$varalias = $mibalias{cisco_router} . $varalias ;
+	$i = 0;
+	foreach (@deltarate) {
+	  ++$i;
+	  print "$varalias $_ RATE-min Iface_$i\n" ;
+	}
+      }
+    }
+
+    @{$prev_varval{$d, $v}} = @{$nvarval{$v}} ; # store new values
+  }	# foreach $var
+}
+
+##
+# Monitor number of lines in use for cisco terminal server.
+# A little different than the other procdata_ modules above... it compares
+# which of the TTY line types are active and adds them up. Does not 
+# differentiate between dialin TTY lines and TTY lines used for other
+# purposes- this can be added easily (look at the line descriptions and
+# take that into account). Can perhaps also tweak to look at TTY line
+# ranges (within the same terminal server).
+
+sub procdata_cisco_ts {
+  my ($dev) = @_;
+  my $d = &toindex($dev);
+  my ($acount, $tcount, @active, @termtype);
+
+  $debug && 
+    print STDERR "(debug) Running procdata_cisco_ts for device $dev\n";
+
+  foreach my $i ( @{$typevars{"cisco_ts"}} ) {
+    if    ($i =~ /tsLineActive/) {   @active = @{$nvarval{&toindex($i)}}; }
+    elsif ($i =~ /tsLineType/)   {   @termtype =  @{$nvarval{&toindex($i)}}; }
+  }  
+  if ($#active < 0 || $#termtype < 0 || $#active != $#termtype)
+  {
+    print STDERR "cisco_ts: ERROR, no. active($#active) != no. types($#termtype)\n" ;
+    return;
+  }
+  $debug &&
+    print STDERR "(debug): active list= $#active, type list= $#termtype\n";
+
+  foreach my $i (0..$#active) {
+    if ($termtype[$i] =~ /\(3\)/ ) { # TTY terminal, not VTY
+      $tcount++;
+      $acount+=$active[$i];	# Since '$active' is either 0 or 1 anyway
+      if ($debug > 1) {
+	print STDERR "(debug): Index=$i Type=$termtype[$i] Active=$active[$i]\n";
+      }
+    }
+  }
+
+  $debug && print STDERR "(debug)Active/Total terminals: $acount/$tcount\n";
+
+  print $mibalias{cisco_ts}, ".tsLineActive $acount VALUE\n";
+
+}				# end: procdata_cisco_ts
+
+##
+# Extract memory, cpu, disk information based on rfc-1514
+#
+sub procdata_host {
+  my ($dev) = @_ ;
+  my $d = &toindex($dev);
+  my $dtime = $testtime - $prevtime{$d};
+  my ($curproc, $maxproc) = (0, 0);
+  my (@storageDesc, @storageTotal, @storageUsed);
+
+  $debug && 
+    print STDERR "(debug) Running procdata_host for device $dev\n";
+  foreach my $var ( @{$typevars{host}} ) {
+    my $v = &toindex($var) ;
+
+    next if (! defined(@{$nvarval{$v}}) );
+
+    if ($var eq "$MIBHOSTRESOURCES.1.1") {	# uptime
+      if (@{$nvarval{$v}}[0] =~ /\((\d+)\)/) {
+	my $uptime = int ($1 / 6000);	# convert msecs to minutes
+	print $mibalias{host}, ".uptime $uptime SECS\n";
+      }
+    }
+    elsif ($var eq "$MIBHOSTRESOURCES.1.6") {	# cur proc
+      $curproc = @{$nvarval{$v}}[0];
+    }
+    elsif ($var eq "$MIBHOSTRESOURCES.1.7") {	# max proc
+      $maxproc = @{$nvarval{$v}}[0];
+    }
+    elsif ($var eq "$MIBHOSTRESOURCES.3.3.1") {	# cpu load
+      my @vals = @{$nvarval{$v}};
+      my ($i, $cpu) = (0, 0);
+      for ($i = ($#vals + 1) / 2; $i <= $#vals; ++$i) {
+	++$cpu;
+	print $mibalias{host}, ".cpuload ", $vals[$i], "  1min-% cpu$cpu\n";
+      }
+    }
+    elsif ($var eq "$MIBHOSTRESOURCES.2.3.1.3") {
+      @storageDesc = @{$nvarval{$v}};
+    }
+    elsif ($var eq "$MIBHOSTRESOURCES.2.3.1.5") {
+      @storageTotal = @{$nvarval{$v}};
+    }
+    elsif ($var eq "$MIBHOSTRESOURCES.2.3.1.6") {
+      @storageUsed = @{$nvarval{$v}};
+    }
+    else {
+      $debug && print STDERR "UNKNOWN var $var, nvarval @{$nvarval{$v}}[0]\n";
+    }
+  }	# foreach
+  if ($maxproc =~ /\d+/ && $curproc =~ /\d+/ && $maxproc > 0 ) {
+    print $mibalias{host}, ".proctable_%used ",
+           int($curproc * 100 / $maxproc), " VALUE\n";
+  }
+  foreach (@storageDesc) {
+    my $used = shift @storageUsed;
+    my $total = shift @storageTotal;
+    my $percentused = int($used * 100 / $total);
+    if (/Physical RAM/i) {
+      s/Physical\s+RAM\s*//i;
+      print $mibalias{host}, ".phymem_%used $percentused VALUE $_\n";
+    }
+    elsif (/Virtual Memory/i) {
+      s/Virtual\s+Memory\s*//i;
+      print $mibalias{host}, ".virtual_%used $percentused VALUE $_\n";
+    }
+    elsif (/Disk partition/i) {
+      s/Disk\s+partition\s*//i;
+      print $mibalias{host}, ".diskspace_%used $percentused VALUE $_\n";
+    }
+    else {
+      print $mibalias{host}, ".storage_%used $percentused VALUE $_\n";
+    }
+  }
+}	# sub procdata_host()
+
+############################################################################
+
+###
+### Utility routines
+###
+
+## Strip periods, hyphens, etc from a string suitable for an array index.
+#  Replace them with '_'
+#
+sub toindex {
+  my ($i) = @_ ;
+  $i  =~ s/[\.-]/_/g ;		# strip off all hyphens, dots, etc.
+  return ($i);
+}
+
+## Do an operation on two vectors (lists). Needs array references.
+#
+sub vector_calc {
+  my ($a, $op, $b) = @_ ;	# three strings
+  my @veca = ();
+  my @vecb = ();;
+  my @result = () ;
+  my $i = 0;
+
+  if (! ref($a) && ! ref($b) ) {
+    print STDERR "vector_calc() Need to get array references\n";
+    return @result;
+  }
+  if ( ref($a) =~ /SCALAR/i) { push (@veca, $$a); }
+  else { @veca = @$a; }
+  if ( ref($b) =~ /SCALAR/i) { push (@vecb, $$b); }
+  else { @vecb = @$b; }
+
+  if ($debug > 1) {print STDERR "vector_calc: To do operation $op\n" ; }
+  if ($debug > 2) {
+    print STDERR "vector_calc: veca = ", join (", ", @veca), "\n" ;
+    print STDERR "vector_calc: vecb = ", join (", ", @vecb), "\n" ;
+  }
+  # Remember that perl array indexes start from 0 (none = -1)
+  if ($#veca < 0 || $#vecb < 0)  {return @result; }
+  
+  # extend the single valued vector to length of longer vector
+  if ($#veca == 0 && $#vecb != 0) {
+    my $x = pop(@veca);
+    foreach $i (0..$#vecb) {push(@veca, $x); }
+  }
+  if ($#vecb == 0 && $#veca != 0) {
+    my $x = pop(@vecb);
+    foreach $i (0..$#veca) {push(@vecb, $x); }
+  }
+  if ($#veca != $#vecb) {	 # oh well, cannot do the operation
+    $debug && print STDERR "Varying array lengths, skipping...\n" ;
+    return @result;
+  }
+  
+  foreach $i (0..$#veca) {	# avoid expensive eval statement
+    my $tval;
+    if    ($op eq "+") { $tval = int($veca[$i] + $vecb[$i]); }
+    elsif ($op eq "-") { $tval = int($veca[$i] - $vecb[$i]); }
+    elsif ($op eq "*") { $tval = int($veca[$i] * $vecb[$i]); }
+    elsif ($op eq "/") { $tval = int($veca[$i] / $vecb[$i]); }
+    else { $tval =  eval "int ($veca[$i] $op $vecb[$i])" ; }
+    push (@result, $tval);
+  }
+  
+  if ($debug > 1) {
+    print STDERR "vector_calc: result= ", join (", ", @result), "\n" ;
+  }
+  return (@result);
+}
+
+##
+# Read lines of the form:
+#	<device> <cid> <type> <type> ...
+# Create a long string of variables to be monitored for each device and
+# store in @devvars{$device}
+sub readconfig {
+  my ($d, $typ, $v);
+  my $startdevices = 0;
+
+  $debug && print STDERR "(debug) Running readconfig\n";
+  open(CONFIG,"< $cfile") || die("Couldnt find $cfile, exiting");
+  while(<CONFIG>)
+  {
+    chomp;
+    if(/^\s*\#/) {next;}   	# skip comments
+    if(/^\s*$/) {next;}		# skip blank lines
+    if ( /^POLLINTERVAL\s(\d+)/i )  { $sleeptime = $1; next ;}
+    if ( !$startdevices && (/^STARTHOSTS/i || /^STARTDEVICES/i || /^DEVICES/i))
+    { $startdevices = 1; next ; }
+    next if (! $startdevices);	# skip all lines until STARTDEVICES
+
+    ($debug>2) && print STDERR "readconfig: device def: $_\n" ;
+    if ( /^\s*(\S+)\s+(\S+)\s+(\S+.*$)/ )
+    {
+      push (@devices, "$1");
+      $d = &toindex("$1");
+      $cid{$d}=  "$2";
+      # remaining are device types
+      foreach $typ (split(/[ ,\t\n]+/, $3)) {
+	($debug>2) && print STDERR "readconfig: dev type: $typ\n";
+	if ($istype{$typ}) {
+	  $isdevtypes{$d, $typ} = 1;
+	  foreach $v ( @{$typevars{$typ}} ) {
+	    ($debug>2) && print STDERR "readconfig: devvar: $v\n";
+	    push (@{$devvars{$d}}, "$v");
+	  }
+	}
+      }				# foreach $typ
+    }
+    else { print STDERR "Ignoring illegal line: $_\n" ; }
+  }				# end while(CONFIG)
+  close (CONFIG);
+  
+  if ($#devices < 0) {die ("No devices to monitor, exiting")};
+  if ($debug > 1) {
+    foreach $d (@devices) {
+      my $x = &toindex($d);
+      print STDERR "(debug) readconfig Device $d, variables = ",
+              join(", ", @{$devvars{$x}}), "\n";
+    }
+  }
+}	# sub readconfig
+  
+##
+# ping a host to check if it is up and running. Might need some
+# tweaking to adjust for different 'ping' styles on different systems.
+# Return 0 if down, 1 if up.
+# Can handle the following syntaxes so far:
+#     ping host pktsize count           # HPUX & Ultrix
+#     ping -s host pktsize count        # SunOS & Solaris
+#     ping -c count -s pktsize host     # all others ?
+sub doping {
+  my ($rhost) = @_ ;
+  my $value = 0 ;		# 1 for up, 0 for down
+
+  $ostype= `uname -s -r -m`  unless $ostype; # OS, revision, arch
+
+  # PING output= 4 packets transmitted, 3 packets received, 25% packet loss
+
+  if ($ping =~ /multiping/) {
+    open(CMD, "$ping -s 100 -c 4 $rhost |");
+  }
+  elsif ($ostype =~ /HP-UX/ || $ostype =~ /ULTRIX/) {
+    open(CMD, "$ping $rhost 100 4 |");
+  }
+  elsif ($ostype =~ /SunOS\s+4/ || $ostype =~ /SunOS\s+5/) {
+    open(CMD, "$ping -s $rhost 100 4 |");
+  }
+  else {
+    open (CMD, "$ping -s 100 -c 4 $rhost |");
+  }
+
+  while (<CMD>) {
+    if ( /\s+(\d+)%\s+packet\s+loss/) { 
+      if ($1 < 50) { $value = 1; } # if 1 lost, then 25%
+      last;
+    }
+  }				# end: while(CMD)
+  close (CMD);
+
+  $debug && print STDERR "(debug) doping return for $rhost =$value\n" ;
+  return ($value);
+}		# end doping()
+
+# This runs snmpwalk, and stores all values for each variable in the
+# array %nvarval
+sub get_snmpdata {
+  my ($device) = @_;
+  my $d = &toindex($device) ;
+
+  foreach my $var ( @{$devvars{$d}} ) {
+    next if ($var =~ /^\s*$/);
+    my $v = &toindex($var);
+    my $cmd = "$snmpwalk $device $cid{$d} $var";
+
+    @{$nvarval{$v}} = () ;	# init to empty array
+    if ($debug > 2) {print STDERR "get_snmpdata: running '$cmd'\n";}
+    open (CMD, "$cmd |");
+    while (<CMD>) {
+      ($debug > 1) && print STDERR "get_snmpdata: CMD output= $_";
+      chomp;
+      # if (/^\s*\S+:(\D*|\s*)(\d+)(\D*|\s*)$/) { # extract number
+      # if (/^[A-Z]+\s*\D+:\s*(\S+.*)\s*$/) { # any non-space value
+      if (/^Name:\s+(\S+)\s+\-\>\s+.+\S:\s+(.*)$/) {
+	my $val = $2;
+	push ( @{$nvarval{$v}}, "$val" );
+	($debug > 1) && print STDERR "get_snmpdata: val is $val\n";
+      }
+      elsif (/^\s*End\s*.+requested\s*OID/i) {	# normal exit
+	last;
+      }
+      else {
+	$debug && print STDERR "snmpwalk ERROR for $device/$var: $_\n" ;
+	last;
+      }
+    }	# while(CMD)
+    close (CMD);
+    ($debug > 1) &&
+      print STDERR "Stored nvarval{$var} = ",
+                   join (" ", @{$nvarval{$v}}), "\n";
+  }	# foreach $var
+}
+
+## Die on getting a terminate signal. Clean up data files.
+##
+sub clean_out_onexit {
+  unlink ($tfile) ;
+  die "($$) Terminating on signal\n" ;
+}	# clean_out_onexit()
+
+###
+###  main
+###
+use SNIPS;
+SNIPS::standalone($0) || die "standalone() failed (another process running?)";
+
+$cfile = shift || $cfile;
+if ("$cfile" eq "") { die("No config file, exiting") ; }
+elsif ($debug) {print STDERR "(debug) Config file is $cfile\n"; }
+
+foreach my $t (@devicetypes) { 
+  eval "if (defined (&init_$t) == 1) {&init_$t; \$istype{\$t} = 1 ; }" ;
+}
+
+&readconfig ;
+foreach ('TERM', 'HUP', 'INT', 'KILL', 'QUIT') {
+  $SIG{$_} = \&clean_out_onexit;
+}
+
+# Output of Check-active SNMP command is:
+#    Name: .iso.org.dod........lts.ltsLineTable.lts.LineEntry.tsLineActive.0
+#    INTEGER: 1
+while (1) {
+  foreach my $dev (@devices) {
+    next if ($dev =~ /^\s*$/);
+#    if (&doping($dev) <= 0) {	# device is dead
+#      print STDERR "Host $dev not responding to ping, skipping\n" if ($debug);
+#      next;
+#    }
+    my $dfile = "$TMPDATADIR" . "/$dev" . ".snmpmon";
+    my $d = &toindex($dev) ;
+    $debug && print STDERR "(debug) Monitoring device $dev\n";
+    open (DFILE, "> $tfile") || die "Cannot open $tfile $!";
+    select(DFILE);
+    $testtime = time;
+    print "TIME $testtime ", scalar(localtime), "\n";
+    print "DEVICE $dev\n";
+    get_snmpdata($dev);
+    ($debug>2) && print STDERR "old prevtime{$d}, testtime: $prevtime{$d}, $testtime\n";
+
+    $prevtime{$d} = $testtime;		# ASSERT: prevtime{d} contains time of
+					#	  last poll
+    $testtime = int((time + $testtime) / 2);	# take average
+    ($debug>2) && print STDERR "new prevtime{$d}, testtime: $prevtime{$d}, $testtime\n";
+
+    # process each type of variable for the device
+    foreach my $typ (@devicetypes) {
+      if ($isdevtypes{$d, $typ}) {
+	eval "defined (&procdata_$typ) && &procdata_$typ(\$dev)" ;
+      }
+    }
+    close (DFILE);
+    rename($tfile, $dfile) || die "Cannot rename $tfile to $dfile $!";
+  }	# foreach $device
+
+  $debug && print STDERR "Sleeping for $sleeptime...\n";
+  sleep $sleeptime ;
+}				# end while(1)

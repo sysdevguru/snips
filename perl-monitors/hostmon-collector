@@ -1,0 +1,450 @@
+#!/usr/local/bin/perl -w
+#
+# $Header: /home/cvsroot/snips/perl-monitors/hostmon-collector,v 1.4 2001/09/24 15:44:36 vikas Exp $
+#
+# A module for 'hostmon' - monitoring Unix host conditions using SNIPS.
+# Connects/gets data from the hostmon-client programs (via telnet or rcp)
+# and saves under $TMPDATADIR
+#
+# You need to run the client modules (hostmon-client) on the remote hosts
+# being monitored and add the name of the host that runs this server
+# program to the '@permithosts' array in the clients.
+#
+# AUTHOR:
+#	Vikas Aggarwal, vikas@navya.com
+#
+#	Copyright 1994-2001, Netplex Technologies, Inc.
+#
+# No warranty is expressed or implied. Permission to copy and use is
+# extended to all. Permission to redistribute is granted under the
+# following conditions: it is not sold for profit; this copyright
+# notice remains intact; the same permissions extend to the recipient;
+# and if any changes are made, a notice is added so stating.
+
+#####################
+#
+# What it does:
+#
+#    This program connects periodically to the hostmon_port of all the
+#    Unix machines listed in its configuration file and copies the
+#    hostmon data to $TMPDATADIR.
+#
+#    This data is then parsed by 'hostmon'.
+#
+# Customization:
+#
+#	Edit '$ping' and 'subroutine doping' for properly 'pinging' a device.
+#	Also does an 'rpcping' (under snips/support/), so install this
+#	program or else change the &rpcping routine to always return '1'.
+#
+#	Put the IP address/name of the host running this program in the
+#	hostmon-client.daemon program (in the @permithosts array). The
+#	client only allows data retrieval via telnet from the hosts listed
+#	in the @permithosts structure.
+#######
+use strict;
+use vars qw ( 
+	     $debug $snipsroot $etcdir
+	     $TMPDATADIR $HOSTMON_SERVICE $HOSTMON_PORT $RCP
+	     $ping $rpcping $ostype @hosts $sleeptime $prognm
+	     $childpid @childpids
+	    );
+
+use POSIX ":sys_wait_h";	# for waitpid
+
+BEGIN {
+  $snipsroot = "/usr/local/snips"  unless $snipsroot;	# SET_THIS
+  push (@INC, "$snipsroot/etc"); push (@INC, "$snipsroot/bin");
+  require "snipsperl.conf" ;		# local customizations
+}
+
+############################
+## Variables customization #
+############################
+				# All host data files under here.
+$TMPDATADIR  = "/tmp/hostmon_data" unless $TMPDATADIR;
+$debug = 0 unless $debug;
+$sleeptime=(60*5);		# default sleeptime of 5 minutes
+@hosts = qw (localhost server.your.domain) unless @hosts;
+
+# Following service name is used if set in /etc/services file
+$HOSTMON_SERVICE = "hostmon" unless $HOSTMON_SERVICE ;
+$HOSTMON_PORT = 5355 unless $HOSTMON_PORT; # default port if not in services
+
+				# Check ping and tweak syntax in sub 'doping()'
+if (!$ping) {$ping = `which ping`; chop $ping;}  # SET_THIS
+$rpcping = "rpcping" unless $rpcping ;		# set in snipslib.pl
+
+#$RCP = "scp -q -B";	# scp in quiet & batch mode
+$RCP = `which rcp` unless $RCP; chomp $RCP;
+
+    # The sleeptime needs to be larger than the hostmon.client's so that
+    # it gets updated fresh data each pass.
+
+#########################################
+
+-d $TMPDATADIR || mkdir($TMPDATADIR, 0700) || die("Cannot create $TMPDATADIR, exiting");
+-w $TMPDATADIR || die("Cannot write to $TMPDATADIR, exiting");
+if ($rpcping =~ m|^/|) {-x $rpcping || die("Cannot find $rpcping, exiting") ; }
+if ($ping =~ m|^/|) {-x $ping || die("Cannot find $ping, exiting"); }
+
+$prognm = $0 ;			# save program name
+select (STDERR); $| = 1;
+select (STDOUT); $| = 1 ;	# set unbuffered
+
+sub readconf {
+  my $starthosts = 0;
+  my $cfile = "hostmon-confg";
+  my $lineno;
+
+  open(CONFIG, "<$etcdir/$cfile")|| die("cannot open $cfile");
+  while (<CONFIG>)
+  {
+    ++$lineno;
+    if(/^\s*\#/) {next;}   	# skip comments
+    if(/^\s*$/) {next;}		# skip blank lines
+
+        # all other lines are device names after STARTHOSTS
+    if ( !$starthosts && (/^STARTHOSTS/i || /^STARTDEVICES/i || /^DEVICES/) )
+    { $starthosts = 1; next ; }
+    if ($starthosts) {
+      if ( /^\s*(\S+)\s*.*$/ )  { push (@hosts, $1); }
+      else { print STDERR "[$lineno] Illegal host line $_, skipping\n" ;}
+      next ;
+    }
+    next;
+  }		# end: while (CONFIG)
+  close (CONFIG);
+
+  print STDERR "Total hosts = ", $#hosts + 1, "\n" if ($debug);
+}
+
+
+# ping a host to check if it is up and running. Might need some
+# tweaking to adjust for different 'ping' styles on different systems.
+# Return 0 if down, 1 if up.
+# Can handle the following syntaxes so far:
+#     ping host pktsize count           # HPUX & Ultrix
+#     ping -s host pktsize count        # SunOS & Solaris
+#     ping -c count -s pktsize host     # all others ?
+sub doping {
+  my ($rhost) = @_ ;
+  my $value = 0 ;	          # 1 for up, 0 for down
+
+  $ostype= `uname -s -r -m`  unless $ostype;	# OS, revision, arch
+
+  # PING output= 4 packets transmitted, 3 packets received, 25% packet loss
+  if ($ping =~ /multiping/) { open(CMD, "$ping -s 100 -c 4 $rhost |"); }
+  elsif ($ostype =~ /HP-UX/ || $ostype =~ /ULTRIX/) {
+    open(CMD, "$ping $rhost 100 4 |");
+  }
+  elsif ($ostype =~ /SunOS\s+4/ || $ostype =~ /SunOS\s+5/) {
+    open(CMD, "$ping -s $rhost 100 4 |");
+  }
+  else {
+    open (CMD, "$ping -s 100 -c 4 $rhost |");
+  }
+
+  while (<CMD>) {
+    if ( /\s+(\d+)%\s+packet\s+loss/) { 
+      $value = 1 if ($1 < 50);		# if 1 lost, then 25%
+      last;
+    }
+  }		# end: while(CMD)
+  close (CMD);
+
+  $debug && print STDERR "(debug) $0 doping for $rhost returned $value\n" ;
+  return ($value);
+}	# end doping()
+
+
+## Check if the host is reachable (the RPC portmapper)
+##
+sub rpcping {
+  my ($rhost) = @_ ;
+  my $value = 0 ;	          # 1 for up, 0 for down
+
+  return 1 if (! defined ($rpcping));
+
+  open (CMD, "$rpcping -t 5 $rhost |");
+  while (<CMD>) { if (/running/) { $value = 1 ; last ; } }
+  close (CMD);
+
+  $debug && print STDERR "(debug) $0 rpcping for $rhost returned $value\n" ;
+  return ($value);
+}	# end rpcping()
+
+##
+# Create a connected socket to the remote host.
+#	newSocket ("cisco-gw.abc.com", 23, 'tcp')
+sub newSocket {
+  my ($host, $service, $nport, $proto) = @_ ;
+  use Socket;
+  use FileHandle;
+
+  my ($port, $remote_addr, $paddr, $SOCK);
+  $SOCK = new FileHandle;
+  $proto = 'tcp' unless $proto;
+  $port = getservbyname($service, $proto) if $service;
+  $port = $nport unless $port;
+
+  if (! $port) {
+    print STDERR "$0: No port for '$port' (no entry in /etc/services)\n";
+    return undef;
+  }
+
+  if ($proto =~ /tcp/) {
+    socket($SOCK, PF_INET, SOCK_STREAM, getprotobyname('tcp'));
+  } else { 
+    socket($SOCK, PF_INET, SOCK_DGRAM, getprotobyname('udp'));
+  }
+  
+  if ($host =~ /^\d+/) { $remote_addr = inet_aton($host); }
+  else { $remote_addr = gethostbyname($host); }
+
+  if (! $remote_addr) {print STDERR "$0: Unknown host $host\n"; return undef; }
+  
+  $paddr = sockaddr_in($port, $remote_addr); # packed address
+  if (! connect($SOCK, $paddr)) {
+    if ($debug || ($! !~ /refused/)) {
+      print STDERR "$0: connect() to $host:$port failed- $!\n";
+    }
+    return undef;
+  }
+  return ($SOCK);
+}	# sub newSocket()
+
+## Connect to hostmon port which should write out the hostmon data on the 
+#  stdout.
+sub try_telnet {
+  my ($host, $dfile) = @_;
+  my $tflag = 0 ; # needed in loop below for parsing telnet data
+
+  $debug && print STDERR "(debug) $0: try_telnet() to $host\n";
+  my $sock = newSocket($host, $HOSTMON_SERVICE, $HOSTMON_PORT, 'tcp');
+
+  if (defined($sock))
+  {
+    select( (select($sock), $| = 1)[0] ); # set socket unbuffered
+    open (HDFILE, "> $dfile") || die "Cannot write to $dfile";
+    while (<$sock>)
+    {
+      if (/refused/)  {last;}	# something went wrong.
+      /^TIME/ && ($tflag = 1);	# start of valid data
+      if ($tflag) { print HDFILE $_ ; }
+    }
+    close ($sock);
+    close (HDFILE);
+    $debug && print STDERR "(debug) $0: try_telnet() to $host successful\n";
+    return 1;
+  }
+  else { return undef; }
+
+}	# endif
+
+##
+# We have to call 'scp'. We need to be able to kill the external scp process.
+# If we use 'system()', then we cannot get the pid of the scp process, so we
+# do a fork and exec.
+sub try_scp {
+  my ($host, $dfile) = @_;
+
+  return undef if (! $host);
+  return undef if ($RCP =~ /NULL/i || $RCP =~ /NONE/i);
+
+  $debug && print STDERR "(debug)) $0: try_scp() to $host\n";
+  if ($RCP =~ /rcp/i) {
+#    return undef if ( &doping($host) <= 0 ); FIX
+#    return undef if ( &rpcping($host) <= 0 ); FIX
+  }
+
+  # this name must match the filename in hostmon-client
+  my $tfile = "/tmp/$host". '*.hostmon' ;
+  
+  ($debug > 1) && print STDERR "(debug) $0: Trying $RCP $host:$tfile $dfile\n";
+  ($childpid = fork) ? waitpid($childpid, 0) :
+    exec "$RCP $host:$tfile $dfile >/dev/null 2>&1" ;
+
+  $childpid = 0;
+  if (! -e $dfile || -z $dfile) {
+    $debug && print STDERR "(debug) $0: try_scp() to $host failed\n";
+    return undef;
+  }
+  return 1;
+}	# try_scp()
+
+##
+#  Kill global variable $childpid. Use to kill 'rcp' processes
+sub killchild {
+  kill (15, $childpid) if ($childpid);	# terminate signal
+  print "(debug) $0: Killed child $childpid\n" if ($debug);
+}
+
+## do one pass over all the hosts.
+sub collect_allhosts {
+  use POSIX ":sys_wait_h";
+
+  return if (0>$#hosts);
+  foreach my $host (@hosts) {
+
+    ($debug > 1) && print STDERR "$0: Doing host $host\n";
+    my $retval = undef;
+    my $childpid = 0;
+    my $hdfile = "$TMPDATADIR/$host.hostmon" ;
+
+    # first try telnetting to the hostmon client port. Use 'eval' and
+    # exit on alarm in case the OS's socket() calls restart on getting
+    # an alarm (i.e cannot be interrupted).
+    eval {
+      local $SIG{ALRM} = sub { die "timeout"; };	# temporarily override
+      alarm(15);
+      $retval = &try_telnet($host, $hdfile);
+      alarm(0);
+    };
+    if ($@ && $@ !~ /timeout/) { alarm 0;}	# if not timeout, clear alarm
+    if ($@ && $@ =~ /terminate/) { exit 0; }
+    
+    next if ($retval);	# i.e. telnet was successful
+
+    $SIG{ALRM} = \&killchild;
+    alarm(15);  $retval= &try_scp($host, $hdfile);   alarm(0);
+    $SIG{ALRM} = 'IGNORE';
+    if ($childpid) {
+      while (waitpid(-1,WNOHANG) > 0) { my $status = $?; }
+    }
+    
+    #print STDERR "$0 could not get $hdfile\n" if (! -e $hdfile || -z $hdfile);
+    if ($debug) {print STDERR "$0 could not get $hdfile\n" unless ($retval);}
+  }
+}	# do_allhosts()
+
+###
+###
+###
+##
+# Handle SIGCHLD signal to avoid zombies.
+sub REAPER {
+  my $child;
+  my $status;
+  print STDERR "INSIDE REAPER\n" if ($debug > 1);
+  while (($child = waitpid(-1, &WNOHANG)) > 0) {
+    $status = $?;
+    # print STDERR "$0: WARNING Child process $child exited with status $status, restart $0\n";
+  }
+  $SIG{CHLD} = \&REAPER;
+}
+
+sub kill_all_children {
+  return if (0>$#childpids);
+  print STDERR "Killing all children- ", join (" ", @childpids), "\n";
+  kill 15, @childpids if ( $#childpids >= 0);
+  @childpids = ();
+}
+
+## Spawn multiple copies of itself with array @hosts
+#
+sub fork_datacollectors {
+  my $HOSTS_PER_PROCESS = 10;
+  my $MAX_PROCESSES = 6;
+  my $hostcnt = $#hosts + 1;
+  my $hosts_per_process = $HOSTS_PER_PROCESS;
+
+  $SIG{CHLD} = \&REAPER;
+  kill_all_children();
+
+  if ( ($hostcnt / $MAX_PROCESSES) > $HOSTS_PER_PROCESS) {
+    $hosts_per_process = int($hostcnt / $MAX_PROCESSES) + 1;
+  }
+
+  my ($i, $j) = (0, 0);
+  my ($childno, $parent) = (0, $$);
+  while ($i < $hostcnt)
+  {
+    $i = $i + $j;
+    last if ($i >= $hostcnt);
+    $j = $hostcnt - $i;
+    $j = $hosts_per_process if ($j > $hosts_per_process);
+    ++$childno;
+    my $child = fork;
+    die "cannot fork() $! ...exiting" if (! defined($child));
+    if ($child) 	# parent
+    {
+      print STDERR "$0 forked $child\n" if ($debug);
+      push (@childpids, $child);
+      next;
+    }
+    ## here is the forked child ##
+    $0 =~ s|^.*/||;	# strip pathname
+    $0 = "$0" . " (child $childno of $parent)";
+    @hosts = splice (@hosts, $i, $j);
+    run_datacollector();
+  }	# while ($i < $hostcnt)
+  print "forked $childno processes\n";
+
+}	# sub fork_datacollectors()
+
+sub run_datacollector {
+
+  # print STDERR "pid $$ doing $#hosts hosts from $hosts[0] to $hosts[$#hosts]\n" if ($debug);
+  foreach ('CHLD', 'TERM', 'KILL', 'QUIT', 'INT') { $SIG{$_} = 'DEFAULT'; }
+  foreach ('HUP') { $SIG{$_} = 'IGNORE'; }
+  # $SIG{TERM} = sub {die "process $$ terminated on TERM signal"; };
+  # $SIG{QUIT} = sub {die "process $$ terminated on QUIT signal"; };
+  while (1) {
+    collect_allhosts();
+    sleep $sleeptime;
+  }
+}
+
+sub my_main {
+  my $redo = 1;	# only redo this loop if we get a SIGHUP
+  while ($redo)
+  {
+    $redo = 0;
+    my $child = undef;
+    foreach ('INT', 'TERM', 'QUIT') {
+      $SIG{$_}  = sub { &kill_all_children; &REAPER; exit 1; };
+    }
+    $SIG{HUP} = sub {	## setup signal handler for HUP
+      print STDERR "Got HUP, rereading config files\n";
+      $redo = 1;
+      $SIG{CHLD} = \&REAPER;
+      &kill_all_children;
+      sleep 5;	# give children time to die
+      @hosts = undef;
+    };
+    kill_all_children();
+    readconf();
+    fork_datacollectors();
+
+  ## kill all children and exit if one dies
+    $SIG{CHLD} = sub {
+      print STDERR "child process $child exited\n" if ($child);
+      &kill_all_children; &REAPER;
+      die "$$ main process exiting";
+    };
+    $child = waitpid(-1, 0);	# wait's forever until a child dies
+  }	# while ($redo)
+
+}	# my_main()
+
+
+##
+## main
+##
+
+if ($#ARGV >= 0 && $ARGV[0] eq "-d") { ++$debug; shift; }
+# read hostnames from stdin if any
+if ($#ARGV == 0 && $ARGV[0] eq "-") {
+  print STDOUT "Enter hosts on stdin, end with ctrl-D\n" if $debug;
+  @hosts = ();
+  while (<>) { chomp; push @hosts, split( /\s/ ); }
+  shift;
+}
+elsif ($#ARGV >= 0) { @hosts = @ARGV; }
+
+use SNIPS;
+SNIPS::standalone($0) || die "standalone() failed (another process running?)";
+
+my_main();
+

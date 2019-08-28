@@ -1,0 +1,33 @@
+# $Id: Makefile.mid,v 1.0 2001/07/08 22:38:19 vikas Exp $
+#
+# Makefile for 'nsmon'
+#
+
+# Might need to link with 'libresolv' on some systems
+
+PROGCDEFS =
+PROGLIBS  =	# -lresolv
+
+TARG =	nsmon
+OBJS =	main.o nsmon.o
+INITFILES = nsmon
+
+
+$(TARG): $(OBJS) Makefile
+	$(CC) $(CFLAGS) $(OBJS) $(LIBS) $(PROGLIBS) -o $@
+
+install: installdir $(TARG)
+	$(INSTALL) $(INSTALLFLAGS) -c -m 751 $(TARG) $(BINDIR)/
+
+## for standalone, need to link with -lresolv or -lbind
+nstest: nsmon.c
+	$(CC) $(CFLAGS) -DTEST $(OS_LIBS) -o nstest nsmon.c
+
+clean:
+	rm -f $(DIRT) nstest $(TARG)
+
+rcs:
+	@echo "Doing 'rcs' in $(TARG)"
+	@-for i in $(OBJS); do \
+		$(CO) -q `basename $$i .o`.c ;\
+	  done

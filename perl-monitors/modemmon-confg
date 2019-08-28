@@ -1,0 +1,10 @@
+## Config for modemmon (modem line usage monitor)
+#
+# If the number of lines in use equal or exceed the values here, the
+# severity will be escalated to the level the value indicates.
+#
+#
+## Name Address  Warning-#lines   Error-#lines   Critical-#lines
+##
+mozart 161.58.1.5	 7 	9 	10
+ringo  192.67.236.1	 10 	12 	15

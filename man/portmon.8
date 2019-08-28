@@ -1,0 +1,78 @@
+.\"$Header: /home/cvsroot/snips/man/portmon.8,v 1.0 2001/07/08 22:31:48 vikas Exp $
+.\"
+.TH PORTMON 8 "June 2001"
+.SH NAME
+portmon \- SNIPS monitor for TCP ports.
+.SH SYNOPSIS
+.B portmon
+[
+.B \-a
+] [
+.B \-d
+] [
+.B \-o
+.I output-file
+] [
+.I config-file
+] [
+.B \-x
+]
+.\"
+.SH DESCRIPTION
+.LP
+.B portmon
+connects to a list of specified TCP ports on specified systems and
+checks to see if connections are accepted on the port. It can send
+a string and then parse the output against a list of responses. Each
+response can be assigned a maximum severity level.
+.PP
+Upto 64 (or more if compiled within MAXFD limits) devices are tested in
+parallel by a single process.
+.PP
+The program can send an initial connect string with embedded newlines- this
+allows testing a POP3 server (as an example) by logging in with username and
+password.
+The program checks for sub-strings in the responses, and is case in-sensitive.
+The first match returns, and the remaining list of responses is not tested.
+The
+.I send-string 
+is optional, and the initial connect response is discarded if this is
+present.
+The 
+.I default-severity
+is the severity if none of the responses match or if a connect fails.
+The severity is escalated in each pass until they reach the levels
+specified in the config file.
+.PP
+The program also tests response times- if the desired response is not
+recieved within the specified time, the severity is escalated.
+.PP
+A sample config file is provided with the distribution.
+.SH OPTIONS
+.TP 20
+.B \-a
+autoreload the configuration file if it is updated since last reload and if
+it is at least 1 minute old.
+.TP
+.B \-d
+selects verbose debugging output mode. Specify multiple times to increase the
+debug level.
+.TP
+.BI "\-o" " output file"
+Name of the file to which to write the output.  This file is 
+.I not
+in human-readable format, and is intended to be processed by the 
+.BR snipstv (1)
+display program.
+.TP
+.B \-x
+extension that is added to the program name to create the config file name
+and output file name.
+.TP
+.I config-file
+This file lists the hosts to be queried for the nameserver. A sample config
+file is provided with the software.
+.\"------------------------------------
+.SH CAVEATS
+The response strings and match tests are not done using regular expressions.
+

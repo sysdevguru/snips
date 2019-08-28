@@ -1,0 +1,131 @@
+# File:		hostmon-confg
+# 	Config file for hostmon-master
+#
+## Regular expressions must NOT HAVE ANY '!' marks in it (exclamation char).
+
+## For multiple lines describing a variable-  The LAST line should be the 
+## 'default' (or empty) line. Note that the order is important, and the
+## first match stops any more searches.
+
+# You can put a '-1' in any of the thresholds to never let the value
+# reach that threshold (for decreasing values). Put a very hi number
+# for increasing thresholds for same functionality.
+
+# Select the pollinterval to be larger than the cycletime of the
+# hostmon.client programs, else this program will get stale data.
+# About 10-15 minutes is a good value.
+
+# List all the hosts after the 'STARTHOSTS' keyword.
+
+Pollinterval	10	
+
+# To enable RRDtool data collection
+RRDTOOL  ON
+
+## THRESHOLDS CAN BE IN INCREASING OR DECREASING ORDER
+##
+#  <variable>  <host regex>  wthres ethres cthres  [comment regex]
+#
+# The host-regex  of '*' is automatically converted into '.+' by
+# hostmon.
+
+# Like to know if Sybase server crashes.
+Uptime		syserv	20 15 10
+Uptime		*	10 9 8
+
+Load5		*	2 5 8
+
+FileTable	*	50  70  90
+InodeTable	*	60  70  90
+ProcTable	*	65  70  80
+
+# Warn if free swapspace decreases below this many MBytes
+SwapSpace	*	30 20 10
+
+# NFS retransmission rate (BSDI has retry & timeout values)
+#	retrans > 5% of calls	=> NFS server overload
+#	timeout hi		=>
+#	badxid = timeout	=> NFS server overload
+#	timeout + retrans hi, badxid low	=> Network overload
+
+NFStimeouts	*	5 7 10
+NFSretries	*	5 7 10
+
+# Used disk space (in MBytes available)
+# Note the default with a critical threshold of 101 so that it never
+# goes into critical.
+DFspace_avail	hosta|hostb	10 7 5	^/$
+DFspace_avail	*	5 4 3		^/$
+DFspace_%used	*	80 90  100	^/usr$
+DFspace_%used	*	80 90  97	^/usr/local$
+DFspace_%used	*	80 90  97	^/home$
+DFspace_%used	*	80 90  97	^/var/spool$
+DFspace_%used	*	90 95  101
+
+DFinodes_%used	*	70 80  90	
+DFinodes_avail	*	7000 5000 1000
+
+# The IObw is probably available only on SunOS and Solaris
+IOseek		*	5  10  15
+IObw		*	20 30  40
+IObps		*	10 20 30
+IOtps		*	10 20 30
+
+# Dont want to see SwapIn SwapOut get to Critical level. Set unreasonable
+# third threshold.
+# SwapIn is normal,   SwapOut is BAD
+SwapIn		*	10  20 999
+SwapOut		*	5   10 20
+
+# Paging is normal
+PageIn		*	10  20 999
+PageOut		*	5   10 999
+PageRe		*	10  20 30
+#PageFlt	*	10  20  30	# ignore page faults
+MemFree		*	20  15  10
+
+CtxtSw		compu.*	500 700 999
+CtxtSw		*	50  150 999
+
+# We dont want to see critical status if CPU is very busy. Flag at Error
+# for a trace record...
+CPUus		*	50  60  70
+CPUsy		*	50  60  70
+CPUidle		*	98  99  -1
+
+NetIErr		*	10  15  25
+NetOErr		*	10  15  25
+NetColl		*	10  15  25
+
+# mail queue length monitor
+#
+# QLocal is total queue length on any system (warn, err, crit)
+# QDest  is the total mail queue for any given destination
+#
+MailQLocal	*	40  60  200
+MailQDest	*	10  30  100	uucp-relay.remote.domain
+MailQDest	*	20  40  100
+
+###
+############## START of HOST LIST ###############
+
+STARTHOSTS
+
+## All the main fileservers
+acctserv
+techserv
+dataserv
+
+## Workhorses
+# dataserv # already in domain-servers list above
+compu1
+compu2
+
+## Misc
+mickey
+minnie
+
+
+
+
+

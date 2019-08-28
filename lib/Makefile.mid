@@ -1,0 +1,83 @@
+# $Header: /home/cvsroot/snips/lib/Makefile.mid,v 1.1 2001/07/28 00:45:16 vikas Exp $
+#
+# Makefile.mid for snips 'lib'. This file also builds the CMU-SNMP lib.
+#
+## include Makefile.head
+
+# directory for CMU snmp sources. Thie SNMP library will be built here
+CMUSNMP    = 	$(SRCDIR)/cmu-snmp
+
+## Any program specific defines or libraries. Dir names should not have
+#  trailing '/'. You can list -DNEED_PUTENV if your system does not
+#  have a putenv() library function.
+PROGCDEFS =	-DETCDIR=\"$(ETCDIR)\"  -DDATADIR=\"$(DATADIR)\" \
+		-DPIDDIR=\"$(PIDDIR)\"	-DRRD_DBDIR=\"$(RRD_DBDIR)\"
+
+PROGLIBS =
+
+ODBCINCLUDES =	-I/usr/local/iodbc/include
+ODBCLIBS = -L/usr/local/iodbc/lib -liodbc
+
+TARG =	libsnips.a
+OBJS=	bsdsignal.o daemon.o eventlog.o event_utils.o getdate.o snips_json.o \
+	netmisc.o putenv.o rrd_funcs.o snips_funcs.o strfuncs.o snips_main.o
+
+all:	$(TARG) CMUSNMP PERLMODULE
+
+$(TARG):    $(OBJS)
+	/bin/rm -f $(TARG)
+	$(AR) $(TARG) $(OBJS)
+	$(RANLIB)  $(TARG)
+	@echo "Created $(TARG) in `pwd`"
+
+CMUSNMP:
+	@[ -d $(CMUSNMP) ] || (echo "MISSING SNMP DIR $(CMUSNMP)" && exit 1)
+	@echo 'Making the new CMU SNMP library under $(CMUSNMP)'
+	@cd $(CMUSNMP)/snmp ; \
+	 if [ ! -f Makefile ]; then \
+		./configure --quiet --prefix=$(CMUSNMP) --disable-shared ; \
+	 fi ; \
+	 make CC="$(CC)" MIBDIR=\"$(ETCDIR)\" all ; \
+	 if [ ! -f $(CMUSNMP)/lib/libsnmp.a ]; then \
+		make install_inc ; make install_static ; \
+	 fi
+
+## This Makefile needs to be generated after libsnips.a is made
+PERLMODULE:
+	 @if [ ! -f ../perl-module/Makefile ]; then \
+	   echo ""; \
+	   echo "Generating  ../perl-module/Makefile"; \
+	   (cd ../perl-module; \
+	    perl Makefile.PL \
+		CC="$(CC)" LD="$(CC)" OPTIMIZE="$(CFLAGS)" LIBS="$(LIBS)" \
+		INSTALLSITELIB=$(ROOTDIR)/lib/perl INSTALLSITEARCH=$(ROOTDIR)/lib/perl INSTALLARCHLIB=$(ROOTDIR)/lib/perl INSTALLMAN3DIR=$(MANDIR) ; \
+	   ) >/dev/null ;\
+	 fi
+
+## For testing, to make a standalone version using -DTEST
+getdate:  getdate.y
+	@/bin/rm -f y.tab.c
+	$(YACC) getdate.y
+	$(CC) $(CFLAGS) -DTEST y.tab.c -o $@
+	@/bin/rm -f y.tab.c
+
+## Putting this rule here just to be able to print out a message about
+#  the 13 shift/reduce conflicts from yacc.
+getdate.o: getdate.y 
+	@/bin/rm -f y.tab.c
+	@echo "Expect 13 shift/reduce conflicts from $(YACC) : "
+	$(YACC) $<
+	$(CC) $(CFLAGS) -c y.tab.c -o $@
+	@/bin/rm -f y.tab.c
+
+odbc_api: odbc_api.c
+	$(CC) $(CFLAGS) -DTEST $(ODBCINCLUDES) $(ODBCLIBS) -o odbc_api $<
+
+install: $(TARG)
+
+clean:
+	@-cd $(CMUSNMP)/snmp ; make realclean ; \
+	 rm -rf $(CMUSNMP)/lib $(CMUSNMP)/include $(CMUSNMP)/man $(CMUSNMP)/etc
+	@-cd $(CMUSNMP)/snmpapps ; make realclean
+	rm -f $(DIRT) getdate odbctest odbc_api
+

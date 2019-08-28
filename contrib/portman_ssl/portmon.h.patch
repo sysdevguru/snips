@@ -1,0 +1,12 @@
+*** portmon.h	Sun Jul  8 18:04:27 2001
+--- ssl_portmon.h	Wed May 26 15:34:08 2004
+***************
+*** 22,27 ****
+--- 22,28 ----
+  #include <signal.h>
+  #include <netdb.h>
+  
++ #define WITH_SSL
+  
+  #define VARUNITS	"msecs"
+  #define POLLINTERVAL  	(60*15)		/* seconds between passes */

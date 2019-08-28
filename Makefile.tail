@@ -1,0 +1,45 @@
+##   #######  Makefile.tail  #######
+#
+# $Header: /home/cvsroot/snips/Makefile.tail,v 1.0 2001/07/17 03:13:34 vikas Exp $
+#
+# Define TARG to be the binaries and ETCFILES to put into ETCDIR
+
+.c.o:
+	$(CC) $(CFLAGS) $(PROGCDEFS) -c  $<
+
+## these dirs are listed in Makefile.head
+installdir:
+	@[ -d $(ROOTDIR) ] || mkdir  $(ROOTDIR) && chown iris:wheel $(ROOTDIR)
+	@[ -d $(BINDIR) ] ||  mkdir $(BINDIR) && chown iris:wheel $(BINDIR)
+	@[ -d $(DATADIR) ] || mkdir $(DATADIR) && chown iris:wheel $(DATADIR)
+	@[ -d $(PIDDIR) ] ||  mkdir $(PIDDIR) && chown iris:wheel $(PIDDIR)
+	@[ -d $(INITDIR) ] || mkdir $(INITDIR) && chown iris:wheel $(INITDIR)
+	@[ -d $(MSGSDIR) ] || mkdir $(MSGSDIR) && chown iris:wheel $(MSGSDIR)
+	@[ -d $(RRD_DBDIR) ] || mkdir $(RRD_DBDIR) && chown iris:wheel $(RRD_DBDIR)
+	@[ -d $(DEVICEHELPDIR) ] || mkdir $(DEVICEHELPDIR) && chown iris:wheel $(DEVICEHELPDIR)
+	@[ -d $(CGIDIR) ] || mkdir -p $(CGIDIR)  && chown iris:wheel $(CGIDIR)
+	@[ -d $(HTMLDIR) ] || mkdir -p $(HTMLDIR)  && chown iris:wheel $(HTMLDIR)
+	@[ -d $(ROOTDIR)/logs ] || mkdir $(ROOTDIR)/logs  && chown iris:wheel $(ROOTDIR)/logs
+
+init:
+	@if [ ! -z "$(INITFILES)" ] && [ -d "$(INITDIR)" ]; then \
+	 for i in $(INITFILES) x ; \
+	  do \
+	   if [ "$$i" = "x" ]; then \
+		: ;\
+	   else \
+		if [ -f "$(INITDIR)/$$i.init" ]; then \
+			echo "Not overwriting existing $(INITDIR)/$$i.init";\
+		else \
+			echo "Installing $$i.init under $(INITDIR)/" ;\
+			ln -s $(BINDIR)/snipsprog.init $(INITDIR)/$$i.init ;\
+		fi \
+	   fi \
+	 done \
+	fi
+
+depend:
+	mkdep $(CFLAGS) `echo $(OBJS) | sed 's/\.o[ $]+/\.c/g'`
+
+## ######## END Makefile.tail  ##########
+

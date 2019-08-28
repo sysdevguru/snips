@@ -1,0 +1,41 @@
+#! /usr/local/bin/perl
+# $Header: /home/cvsroot/snips/perl-monitors/mkarmon,v 1.0 2001/07/09 04:33:20 vikas Exp $
+#
+# Author:  John Wobus, jmwobus@mailbox.syr.edu
+#
+# This software is part of the SNIPS monitoring package
+# developed and maintained by vikas@navya.com
+#
+# mkarmon - take output of Cisco "show apple route" command and
+# create lines suitable for armon configuration file (for SNIPS).
+#
+# Sample execution command:
+#    rcisco  myrouter mypasswd 'show apple route'  | mkarmon
+#
+# Example lines:
+#    C Net 50-50 directly connected, Ethernet0, zone Netplex:Sub50
+#    R Net 52 [1/G] via 50.128, 1 sec, Ethernet0, zone Netplex:Sub50
+#    C Net 1320-1339 directly connected, ATM8/0.9, zone [MCV]
+#                Additional zones: 'Learning Services Lab','Law Lab','Law',
+#                                  'Labs','Field'
+#
+##
+##
+sub doline {
+    if($ready =~ /^[RC] Net (\d+(-\d+)?).*((Ethernet|Serial|ATM|Fddi|Fa)[\d\/\.]+)[\s,]*(zone |Zone:")(\[?\w\S*(\s+\S+)*\]?)"?\s*(Additional zones: (.*) ?)?$/)
+    {
+	$nets=$1;
+	$interface = $3;
+	$zone=$6;
+	$xzones=$8;
+	$interface =~ s/Ethernet/e/ ;  $interface =~ s/Serial/s/ ;
+	$interface =~ s/ATM/a/ ;  $interface =~ s/Fddi/f/ ;
+	$interface =~ s/Fa/t/ ;	# fast ethernet
+	$item="$nets\t$interface\t$zone";
+
+	print STDOUT "$item\n";
+    }
+}
+
+
+while(<>){chop;$ready=$_;&doline;}

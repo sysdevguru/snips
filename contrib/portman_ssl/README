@@ -1,0 +1,33 @@
+From: "Ean Kingston" <ean@hedron.org>        
+To: <nocol-users@navya.com>                  
+Subject: [snips-users] portmon with ssl support.
+Date: Wed, 26 May 2004 15:50:35 -0400
+
+
+Folks,
+
+I needed to add https monitoring to our monitoring system at work so I
+adapted portmon to work through ssl. It (obviously) needs the openssl
+libraries to compile with and it doesn't allow non-ssl connections anymore.
+
+I didn't have a lot of time so I wasn't able to make it an option to the
+existing portmon, though I'm hoping to do so in my spare time.
+
+Attached (I hope) are diffs for the three files I modified. These are
+differenced from the 1.2beta2 package of Snips.
+
+The files to patch (from the extracted to directory) are:
+include/portmon.h
+portmon/main.c
+portmon/portmon.c
+
+There are no additional variables for ssl handshake timing or validating
+server certificates. This just does what portmon did but through ssl.
+
+Hopefully I will have a cleaner implementation that allows for
+portmon/portmon+ssl support in one tool at some time in the future. Until
+then, these patches might be useful to someone.
+
+I don't have updates to the makefile because I did the compile of my ssl
+portmon by hand.
+

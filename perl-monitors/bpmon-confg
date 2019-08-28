@@ -1,0 +1,9 @@
+# bpmon configuration
+# You must configure the ethernet address of the machine
+# snips is running on:
+#
+haddr=080020001123
+#
+# hostname	ipaddress
+#
+myhost.abc.edu	130.44.44.44

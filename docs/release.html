@@ -1,0 +1,309 @@
+<html>
+<!-- $Header: /home/cvsroot/snips/docs/release.html,v 1.3 2002/01/30 05:41:15 vikas Exp $ -->
+
+<head>
+<title>SNIPS / SNIPS RELEASE Notes</title>
+<!-- This is the HISTORY file -->
+<style>
+<!--
+body { background-color : White; font-size: small;
+       font-family : Verdana, Arial, Helvetica, sans-serif;
+     }
+.main { background-color : White; font-size: small;
+       font-family : Verdana, Arial, Helvetica, sans-serif;
+     }
+-->
+</style>
+</head>
+
+<body bgcolor="#FFFFFF">
+
+<h1 align="center">SNIPS Release Notes &amp;<br>
+Change Log</h1>
+
+<hr align="center" width="70%" noshade color="#008080">
+
+<h3>Features in v1.x</h3>
+
+<p>The main features in this release of the software are:</p>
+
+<blockquote>
+  <table border="0" width="90%" bordercolor="#C0C0C0" cellspacing="0"
+	 cellpadding="3" class="main">
+    <tr>
+      <td><strong>» RRDtool support</strong></td>
+      <td>Support for storing and graphing monitored data using RRDtool.</td>
+    </tr>
+    <tr>
+      <td width="25%"><strong>» HUP handler</strong></td>
+      <td width="75%">All monitors can be sent a HUP signal to re-read their config file.</td>
+    </tr>
+    <tr>
+      <td><strong>» 'rating' of events</strong></td>
+      <td>A new binary string indicating the result of the last 4 (or 8) polls for each device.</td>
+    </tr>
+    <tr>
+      <td><strong>» color curses</strong></td>
+      <td>Support for color curses in snipstv</td>
+    </tr>
+    <tr>
+      <td><strong>» more snipstv views</strong></td>
+      <td>Multiple extended views in snipstv (using the 'e' key)</td>
+    </tr>
+    <tr>
+      <td><strong>» snipsweb sorting</strong></td>
+      <td>snipsweb allows sorting and filtering when run as a CGI</td>
+    </tr>
+    <tr>
+      <td><strong>» hostmon for NT</strong></td>
+      <td>hostmon-client for NT machines</td>
+    </tr>
+    <tr>
+      <td><strong>» RTT in ippingmon</strong></td>
+      <td>ippingmon now also records packet round trip times (RTT)</td>
+    </tr>
+  </table>
+</blockquote>
+
+<p>&nbsp;</p>
+
+<hr color="#008080">
+
+<h3>Release Notes</h3>
+
+<h4><u>snips v1.2<i>(Jan 2002)</i></u></h4>
+
+<p>Minor release, primarily bug fixes.</p>
+
+    <blockquote>
+      <dl>
+	<dt>snipsweb.cgi , rrdgraph.cgi</dt>
+	<dd>grep while comparing @OK_REFERER should have been case
+		insensitive (md@lf.net)
+	</dd>
+	<dt>lib/event_utils.c</dt>
+	<dd>Bug in calc_status()- was returning critical threshold
+		on warning (William.Dorfmann@kesoftware.com) <br>
+	    Also was not handling the case where thresholds were
+		  all equal (marya@st.jip.co.jp)
+	</dd>
+	<dt>genweb.cgi</dt>
+	<dd>eventime should have been eventtime. Caused no-sound
+		(allan.magmanlac@nrns.ca). Also needed to convert
+		$neweventAge minutes to seconds (shura@korus.isp.ru)
+	</dd>
+	<dt>snmpgeneric</dt>
+	<dd>Was not calling close_datafile() at end (david.cole@bigfoot.com)
+	</dd>
+	<dt>logstats.pl</dt>
+	<dd>Fixed parsing (William.Dorfmann@kesoftware.com and 
+		russell@loosenut.com)
+	</dd>
+	<dt>rrdgraph.cgi</dt>
+	<dd>Added vertical labels to the graphs (peiffer@nts.umn.edu)
+	</dd>
+	<dt>beep_oncall</dt>
+	<dd>New version from peiffer@nts.umn.edu
+	</dd>
+	<dt>snmpmon-collector</dt>
+	<dd>Patch for div by zero in procdata_router().
+		(darin.davis@callisma.com) <br>
+	    doping() subroutine of snmpmon-collector had the ping packet
+		  size hardcoded at 100 bytes ("open (CMD, "$ping -s 100
+		  but normal users aren't allowed to resize ping
+		  packets on Linux. Now does not do a doping()
+		  (mmoore@novator.com)
+	</dd>
+	<dt>snmpgeneric</dt>
+	<dd>Patch for not showing variable name in alter_event()
+		(erm@world.std.com)
+	</dd>
+	<dt>sqlmon</dt>
+	<dd>alter_event() was missing a field.
+	</dd>
+	<dt>multiping</dt>
+	<dd>multiping timings were skewed by about 200ms or so
+	   because it was sleeping for 50ms (INTERPKT_GAP) between
+	   each ping.
+	</dd>
+	<dt>snipsweb/Makefile</dt>
+	<dd>make install now overwrites existing files since all
+	  customization is stored in snipsweb-confg.
+	</dd>
+	<dt>snipsweb.cgi</dt>
+	<dd>» date/timestamps were not appearing in the Devices logs page
+	  (fix by sco@openface.ca) <br>
+	</dd>
+	<dt>hostmon</dt>
+	<dd>Was corrupting data- comment/subdevice information was
+	  showing up in data file because $comment was being set
+	  to undef instead of an empty string in alter_event().
+	</dd>
+	<dt>hostmon-collector</dt>
+	<dd>try_telnet() was failing (fix by eankingston@home.com)
+	</dd>
+	<dt>genweb.cgi</dt>
+	<dd>One of the IMG lines had single quote around file name
+	  instead of double quotes (fix by rob@piethief.co.uk)
+	</dd>
+      </dl>
+    </blockquote>
+
+<hr align="center" width="50%" size="1" color="#0000FF">
+
+------------
+
+<h4><u>snips v1.1 <i>(Aug 2001)</i></u></h4>
+
+<p>Minor release, primarily bug fixes.</p>
+
+    <blockquote>
+      <dl>
+	<dt>snipslogd-conf</dt>
+	<dd>snipslogd-conf extension should have been -confg
+	</dd>
+	<dt>perl-module</dt>
+	<dd>Had to define LD also while generating Makefile. Solaris machines
+	  can pick up cc instead of command line gcc.
+	</dd>
+	<dt>snipslogd</dt>
+	<dd>» Converts host byte order to network for logging between hosts
+	  with different endian.<br>
+	  » Bug fix where process was getting killed in debug mode.
+	</dd>
+	<dt>snipsweb</dt>
+	<dd>» Misc bugs in genweb.cgi snipsweb.cgi <br>
+          » crontab listed snipsweb.cgi in bin/ dir instead of web/cgi dir<br>
+          » was not handling cookies correctly (fix by kylev@yaga.com)<br>
+          » genweb.cgi was not parsing CGI parameters properly
+	</dd>
+	<dt>snipsperl.conf</dt>
+	<dd>Should use qq() instead of q(). Was causing all perl scripts to
+	  give errors.
+	</dd>
+	<dt>etherload</dt>
+	<dd>Was not setting name of config file correctly.
+	</dd>
+	<dt>ntpmon</dt>
+	<dd>» Was returning -1 in stratum on error.<br>
+	  » Bug fixed where bzero() was being called after get_inet_address().
+	</dd>
+	<dt>perl-module</dt>
+	<dd>unpack_event() was returning bad values, because tstr was not
+	  declared static in event2strarray()
+	</dd>
+	<dt>radiusmon</dt>
+	<dd>Added portType option (reported by fosters@uk.psi.com)
+	</dd>
+	<dt>snmpmon-collector</dt>
+	<dd>Checks to see if variables were initialized to prevent warning
+	  messages.
+	</dd>
+	<dt>cmu-snmp/mib-v2.txt</dt>
+	<dd>Had to comment out the HP private mib since it was messing
+	  up the parsing of the 'mib-2.system' tree.
+	</dd>
+	<dt>notifier.pl</dt>
+	<dd>Numerous bug fixes (bgoodwin@usdatacenters.com)
+	</dd>
+	<dt>snmpmon-collector</dt>
+	<dd>Error in trimming the variable names.
+	</dd>
+	<dt>crontab.snips</dt>
+	<dd>Listed log-maint.pl instead of logmaint.pl
+	</dd>
+      </dl>
+    </blockquote>
+
+<hr align="center" width="50%" size="1" color="#0000FF">
+
+
+<h4><u>snips v1.0 <i>(June 2001)</i></u></h4>
+
+<p>Complete rewrite of all modules and libraries.</p>
+
+<blockquote>
+  <table border="1" width="90%" bordercolor="#C0C0C0" cellspacing="0"
+	 cellpadding="3" class="main">
+    <tr>
+      <td width="5%">1.</td>
+      <td width="18%">RRDtool</td>
+      <td>Added support for generating RRD databases in all software.</td>
+    </tr>
+    <tr>
+      <td>2.</td>
+      <td>multiping</td>
+      <td>» Replaced alarm() with select(). 2x faster (500 sites in 150 secs)<br>
+      » Can now read host list from stdin instead of cmdline.<br>
+      » Also monitors round-trip times (RTT)</td>
+    </tr>
+    <tr>
+      <td>3.</td>
+      <td>snips.h</td>
+      <td>» Increased size of fields and added new fields.<br>
+      » All datafiles have DATA_VERSION stored as first event.</td>
+    </tr>
+    <tr>
+      <td>4.</td>
+      <td>snipstv</td>
+      <td>» Color ncurses <a href="mailto:(jgreco@ns.sol.net">(jgreco@ns.sol.net</a>)<br>
+      » Multiple 'extended' views<br>
+      » Rating</td>
+    </tr>
+    <tr>
+      <td>5.</td>
+      <td>HUP support</td>
+      <td>All servers support HUP for reloading config files.</td>
+    </tr>
+    <tr>
+      <td>6.</td>
+      <td>eventlog.c</td>
+      <td>snipslogd&nbsp; hostname can be set in SNIPSLOG_HOST environment variable for all the
+      monitors (jgreco@ns.sol.net).</td>
+    </tr>
+    <tr>
+      <td>7.</td>
+      <td>-x option</td>
+      <td>Added -x flag to add an extension to the program name&nbsp; (jgreco@ns.sol.net)</td>
+    </tr>
+    <tr>
+      <td>8.</td>
+      <td>Local address<br>
+      binding</td>
+      <td>If an address is set in the environment variable SNIPS_LCLADDR, that local address is
+      used for binding the local socket (if multiple local address, needed by firewalls)&nbsp; -
+      jgreco@ns.sol.net</td>
+    </tr>
+    <tr>
+      <td>9.</td>
+      <td>Hostnames</td>
+      <td>Can use hostnames instead of IPaddr in all config files.</td>
+    </tr>
+    <tr>
+      <td>10.</td>
+      <td>genweb.cgi</td>
+      <td>Added CGI support to snipsweb.pl (rocky@breakaway.net)</td>
+    </tr>
+    <tr>
+      <td>11.</td>
+      <td>hostmon-nt</td>
+      <td>Hostmon-client for Windows NT machines (srbrown@nyx.net)</td>
+    </tr>
+    <tr>
+      <td>12.</td>
+      <td>notifier.pl</td>
+      <td>Read eventlog data from stdin for running from snipslog.conf</td>
+    </tr>
+    <tr>
+      <td>13.</td>
+      <td>portmon</td>
+      <td>Stores and displays the response time of the web pages.</td>
+    </tr>
+  </table>
+</blockquote>
+
+<hr align="center" width="50%" size="1" color="#0000FF">
+
+<p align="center"><a href="mailto:vikas@navya.com">Feedback</a></p>
+</body>
+</html>

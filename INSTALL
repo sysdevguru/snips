@@ -1,0 +1,297 @@
+## $Id: INSTALL,v 1.1 2001/09/24 18:48:28 vikas Exp $
+
+INSTALLATION INSTRUCTIONS FOR 'SNIPS' v1.2
+==========================================
+
+NOTE:	SNIPS is a replacement for NOCOL, and should be mostly backward 
+	compatible with existing config files, etc.
+
+QUICK GUIDE:
+------------
+	You need at least Perl v5.005 or higher.
+
+	./Configure
+	make
+	make install
+	make root
+
+	# then edit all the config files, edit etc/keepalive_monitors.pl
+	# and insert crontab.snips into your cron. Remember to edit
+	# 'snipslogd-confg'.
+
+DETAILED INSTRUCTIONS
+---------------------
+
+NOTE:	Sample config files are also provided for each monitor. These are
+	copied over in the snips/etc/samples directory during installation.
+	Copy these to snips/etc/ and edit for each monitor.
+
+1. Plan on a location for installing the entire software. It is recommended
+   that all required directories pertaining to SNIPS be under one directory
+   (say /usr/local/snips)  with perhaps symbolic links to the DATA directory.
+   This directory is referred to as the $ROOTDIR in all scripts.
+
+2. Run 'Configure' in the top level SNIPS source directory:
+
+	sh Configure  (or ./Configure)
+
+3. Run 'make' (might want to save the output using 'make >& make.out')
+
+4. If you get an error 'undefined symbol _strerror()', then edit
+   include/osdefs.h and add #undef HAVE_STRERROR at the very end.
+
+5. The default SNIPS logging port is defined in 'snipslog.h' to 5354.
+   Also, if using hostmon, the default data port is defined in the hostmon
+   modules as port 5355.
+
+   You can change these default ports (snipslog.h and hostmon) if you want
+   to use some other port number (preferably >1023 so that the programs
+   do not have to run as 'root'). Then add the following lines in 
+   your '/etc/services' file (mainly for inetd- the programs use the
+   default ports if there is no entry in the /etc/services file).
+
+	snipslog	5354/tcp	# snipslogd with TCP
+	snipslog	5354/udp	# snipslogd with UDP
+	hostmon		5355/tcp	# hostmon uses TCP
+
+6. Make sure you can write to $ROOTDIR for installation, and then:
+
+	make install
+	su
+	make root	# to install etherload, multiping, trapmon
+
+7. Look at the config files in the $ROOTDIR/etc/samples directory, and 
+   edit/save them to the $ROOTDIR/etc directory. List the hosts (running
+   the monitors if distributed on various systems) which can log to 'snipslogd'
+   in the config file for snipslogd.
+   Edit the global snips config file- snips.conf which is usually
+   stored in $ROOTDIR/etc/snips.conf
+   Edit the master config file for the perl monitors (snipsperl.conf)
+   which is usually stored in $ROOTDIR/etc/snipsperl.conf
+
+8. If snipslogd writes to log files, make sure that the proper LOG 
+   directory exists where the log files are created. Set this in
+   snipslogd-conf and logmaint.pl
+
+9. Edit the following scripts (these are run from your CRONTAB).
+
+   - bin/keepalive_monitors.pl' checks to see if the various monitors
+     are running. Edit and set the values of PROGRAMS1, HOST1, etc.
+     You can distribute the monitors on multiple systems and share the
+     /snips data disk via NFS. List all the monitors that you want to run
+     per system in this file.
+     This is run from the crontab every 30-60 minutes.
+
+   - bin/notifier.pl sends email listing sites that have been
+     critical between N to N+1 hours. You can use this program to send
+     email to senior personnel in your staff if sites are down for more
+     than a stipulated time (as manager's often tend to request).
+     It is run from the crontab every hour.
+
+   - bin/logmaint.pl cycles old snipslogd logs and also runs the
+     logstats.pl program to generate statistics (it sends a HUP to
+     the snipslogd process).
+
+   Create the mail aliases that you had selected for OPSMAIL and ADMINMAIL
+   in your /etc/aliases.
+
+10. Test 'snipslogd' by starting it up in debug mode (-d). See if it
+   complains about anything. You will have to edit snipslogd-conf to
+   set the location of the log files that are created. Check logging
+   using the perl script 'perl-monitors/testlog' in the src directory.
+   Stop 'snipslogd' after testing using init.d/snipslogd.init
+
+   Then install the 'bin/crontab.snips' file in the snips users' crontab.
+   (usually su snips ; crontab crontab.snips). This will run 
+   'keepalive_monitors.pl' which starts up snipslogd and other monitors.
+   If you want to run keepalive_monitors.pl directly instead of cron for
+   now, run it as the snips user.
+
+   Use 'snipstv -l 4' to see if any data is being collected under the 
+   DATA directory. Look in the $ROOTDIR/etc/*.error files for any errors.
+
+   REMEMBER that the monitors log events to snipslogd only when the state
+   of the event CHANGES. So nothing might be logged to snipslogd if all
+   the sites remain at the same state (up/down) and threshold level.
+
+11. You can add user 'snips'  to your password file to allow anyone to
+    log in as user 'snips' and see the state of the network. A typical
+    entry is:
+
+      snips::65534:65534:Network Monitoring:/tmp:/usr/local/snips/bin/snipstv
+
+    All signals are trapped by the 'snipstv' display program and cause
+    it to terminate.
+
+12. You can use the shell scripts under $ROOTDIR/init.d/ to start,stop
+    the various processes manually. Note that keepalive_monitors.pl will
+    run any stopped daemons from crontab automatically.
+
+13. To install the HTML Web interface (snipsweb/)
+  - The components to be installed under your web tree are installed
+    in a skeleton dir $ROOTDIR/web/. Copy these files into your web
+    area. Remember to setup web authentication (e.g. using htaccess)
+    for the CGI scripts.
+  - Edit $ROOTDIR/etc/snipsweb-confg for config settings (search for
+    the keyword SET_THIS).
+  - Edit the &doTroubleshoot() function and check the troubleshooting
+    commands in 'snipsweb.cgi'
+  - Create a $ROOTDIR/etc/webusers file using the sample as an example. You
+    can generate encrypted password using the utility script docrypt.pl
+    If you are protecting your web site using the 'htaccess' file method
+    built into your web server, then the passwords in 'webusers' are not
+    used, only the userlevel is extracted.
+  - Put additional device specific help files in $ROOTDIR/device-help/
+    using the 'default' file as a template.
+  - Create the following files owned by your httpd process:
+
+	cp /dev/null $ROOTDIR/etc/updates
+	cp /dev/null $ROOTDIR/etc/webcookies
+	chown  httpd $ROOTDIR/etc/updates $ROOTDIR/etc/webcookies
+
+  - Create $IMAGE_CACHEDIR for the rrd images, and make sure its
+    writable by the httpd process
+	chown httpd $ROOTDIR/rrd-images
+
+PERL-MONITORS
+-------------
+
+There is a PERL interface for developing additional SNIPS monitors using the
+library 'snipslib.pl' perl library. To use this, you need to have PERL
+installed on your system.
+
+1.  If using 'hostmon', you need to run the standalone 'hostmon-client'
+    programs on the machines you want monitored, and run the 'hostmon'
+    process on the 'snips' server. Check the '@permithosts' line in the
+    'hostmon-client' program to ensure that it allows the snips host to
+    connect to the hostmon-client processes. Then copy over the entire
+    'perl-monitors/hostmon-osclients' directory to all the Unix hosts that
+    you want monitored. These client routines do not use snipslib.pl
+    and do not use any configuration file.
+    Start up hostmon-client at boot time by making an entry in your
+    /etc/rc.local or equivalent file. As an example, you can do the
+    following on all your Unix hosts you want monitored:
+	cd $ROOTDIR/bin
+	rsh host1 mkdir /usr/local/snips
+	rcp -r hostmon-osclients host1:/usr/local/snips
+	rlogin host1
+	# Now edit your /etc/rc.local or whatever system startup script
+	# and add the line:
+	#   (cd /usr/local/snips/hostmon-osclients; ./hostmon-client)
+	# Run this command manually for now since you are not rebooting
+	# your machine.
+
+    The 'hostmon' and 'hostmon-collector' process on the snips host will
+    be restarted by the 'keepalive_monitors.pl' process. Edit the
+    hostmon-confg file using the sample config as an example.
+
+2.  To use 'snmpmon',  edit and set the thresholds in the snmpmon-confg
+    file and also list the devices that need to be monitored. Run snmpmon
+    and snmpmon-collector. SNMP data is generated in the 
+    '/tmp/snmpmon_data' directory.
+
+    (There is another snmp  monitor 'snmpgeneric' which can also be used
+     instead of snmpmon.
+
+3.  If the monitor that you want to run uses 'rcisco', then enter your 
+    router's password in it and install it in snips/bin  with mode 710.
+    Alternatively, you can use the 'tcpf.c' program to run a remote
+    telnet command.
+    Edit the SNMP community string in any perl script if so indicated in 
+    the perl-monitors/README (if it uses snmpwalk).
+
+4.  Create the config files under $ROOTDIR/etc/. Samples are in the
+    $ROOTDIR/etc/samples subdirectory.
+
+5.  For troubleshooting, set the $debug and $libdebug values to '1' or
+    higher. You can also send a SIGUSR1 signal to running modules to
+    change the debug level (increases to max and then resets on each
+    SIGUSR1).
+
+6.  Check the size of the event_t structure (see TROUBLESHOOTING item below).
+
+7.  There is a X-window Tcl/Tk interface developed by Lydia Leong
+    (ndaemon and tkSnips). You need 'tixwish' in order to run
+    tkSnips. You should run ndaemon on the snips host (this 
+    listens on TCP port 5005). You can then run 'tkSnips' from
+    any host, and it connects to ndaemon. THERE IS NO ACCESS CONTROL
+    in ndaemon, so you must ensure that only permitted hosts (running
+    tkSnips) can access this host through the firewall. This can also
+    run on Windows machines if you have tixwish installed.
+
+TROUBLESHOOTING
+---------------
+
+1. Some warnings are to be expected, but there should be no major errors.
+
+2. If the errors are about include files or variable types, look for the file
+   that is being included under the  /usr/include sub-directories. The
+   various systems love to move include files back and forth between the
+   include and the include/sys directories (especially 'time.h').
+
+3. If 'multiping' fails to compile on your system, you will have to
+   set the value of PINGPATH in ippingmon-confg (and check that the
+   output of your PINGPATH is parsed correctly in pingmon/pingmon.c
+
+4. For the nameserver monitor, old versions of the resolver library might
+   complain. Some include files defined the '_res' variable differently, so
+   try changing all occurences of '_res.nsaddr' to '_res.nsaddr_list[0]'
+   in the src/nsmon/nsmon.c module (look in your /usr/include/resolv.h).
+   Make sure that the 'libresolv' library exists while linking.
+
+   Newer nameserver/resolver libraries are called '-lbind' instead of
+   '-lresolv', so if you have installed the latest version of bind,
+   change all references in the Makefile (or Configure) to '-lbind'
+   instead of '-lresolv'.
+
+5. For trapmon, the CMU SNMP library is used. Make sure that it was properly
+   built under 'src/cmu-snmp/snmp'. If not, try following the instructions
+   is cmu-snmp/README to build and install the library in the local
+   directory.
+
+6. Most monitors have a '-d' option for debugging, or create error
+   files in the $ROOTDIR/etc.
+
+7. If you get a 'h_addr_list[0]' not defined error, simply edit 
+   snips.h and add the following line in it:
+
+	#define h_addr 1
+
+  This is because of the difference in the hostent() structure of netdb.h
+  in very old systems.
+
+8. Check if the regular expressions in the &dotest() routine in the PERL
+   modules need any changes for your site.
+
+9. If you get strerror() undefined errors, then edit include/osdefs.h
+   and comment out the definition-  define HAVE_STRERROR 1
+   If you get errors about putenv() not found, then edit
+   lib/Makefile.mid and add -DNEED_PUTENV to PROGCDEFS.
+   If you get pfopen() errors in etherload on DEC OSF1, then add pfopen.o
+   to the etherload/Makefile.mid OBJS definition.
+
+10. In snipslib.pl, watch out for the padding in the '$event_t'  template.
+    C compilers tend to align the fields of structures on even byte boundaries,
+    so you might have to add some additional 'null' padding using 'x' depending
+    on your system architecture. Set $libdebug = 1 to see the size of the 
+    $event structure. The size of the data files produced by the C monitors
+    should be a multiple of the perl $event structure. The C utility program
+    'show_snips_struct_sizes' can be used to see the event struct sizes
+    in the C modules.
+
+11. Check the syntax of the ping() function in 'snipslib.pl' file
+    to make sure that the command line arguments are okay for your system.
+
+
+12. The perl-module requires at least Perl v5.x.
+
+Comments to 'snips-info@navya.com' and bugs to 'snips-bugs@navya.com'
+
+The README file has more information. Documentation is under the docs/
+directory.
+
+
+	Vikas Aggarwal
+	(vikas@navya.com)
+	-----------------
+

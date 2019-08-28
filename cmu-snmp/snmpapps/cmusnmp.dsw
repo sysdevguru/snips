@@ -1,0 +1,119 @@
+Microsoft Developer Studio Workspace File, Format Version 5.00
+# WARNING: DO NOT EDIT OR DELETE THIS WORKSPACE FILE!
+
+###############################################################################
+
+Project: "libsnmp"=.\libsnmp\libsnmp.dsp - Package Owner=<4>
+
+Package=<5>
+{{{
+}}}
+
+Package=<4>
+{{{
+}}}
+
+###############################################################################
+
+Project: "snmpget"=.\snmpget\snmpget.dsp - Package Owner=<4>
+
+Package=<5>
+{{{
+}}}
+
+Package=<4>
+{{{
+    Begin Project Dependency
+    Project_Dep_Name libsnmp
+    End Project Dependency
+}}}
+
+###############################################################################
+
+Project: "snmpgetnext"=.\snmpgetnext\snmpgetnext.dsp - Package Owner=<4>
+
+Package=<5>
+{{{
+}}}
+
+Package=<4>
+{{{
+    Begin Project Dependency
+    Project_Dep_Name libsnmp
+    End Project Dependency
+}}}
+
+###############################################################################
+
+Project: "snmpstatus"=.\snmpstatus\snmpstatus.dsp - Package Owner=<4>
+
+Package=<5>
+{{{
+}}}
+
+Package=<4>
+{{{
+    Begin Project Dependency
+    Project_Dep_Name libsnmp
+    End Project Dependency
+}}}
+
+###############################################################################
+
+Project: "snmptranslate"=.\snmptranslate\snmptranslate.dsp - Package Owner=<4>
+
+Package=<5>
+{{{
+}}}
+
+Package=<4>
+{{{
+    Begin Project Dependency
+    Project_Dep_Name libsnmp
+    End Project Dependency
+}}}
+
+###############################################################################
+
+Project: "snmptrap"=.\snmptrap\snmptrap.dsp - Package Owner=<4>
+
+Package=<5>
+{{{
+}}}
+
+Package=<4>
+{{{
+    Begin Project Dependency
+    Project_Dep_Name libsnmp
+    End Project Dependency
+}}}
+
+###############################################################################
+
+Project: "snmpwalk"=.\snmpwalk\snmpwalk.dsp - Package Owner=<4>
+
+Package=<5>
+{{{
+}}}
+
+Package=<4>
+{{{
+    Begin Project Dependency
+    Project_Dep_Name libsnmp
+    End Project Dependency
+}}}
+
+###############################################################################
+
+Global:
+
+Package=<5>
+{{{
+}}}
+
+Package=<3>
+{{{
+}}}
+
+###############################################################################
+

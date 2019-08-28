@@ -1,0 +1,42 @@
+DATABASE SUPPORT HAS NOT BEEN COMPLETED. SEE README.DATABASES.
+
+Rem
+Rem
+Rem Oracle SQL commands for creating a SNIPS database.
+Rem
+Rem
+
+connect snipsUser/snipsPasswd
+drop table snips_events
+
+create table snips_events (
+	sender char(40) not null,
+	device_name char(128) not null, device_addr char(128),
+	device_subdev char(128), var_name char(64), var_value integer,
+	var_threshold integer, var_units char(64),
+	severity integer, loglevel integer, state integer, rating integer,
+	eventtime integer, polltime integer,
+	op raw(32), id raw(32)
+  );
+
+Rem
+Rem Make combination of device + subdevice + var  to be unique in the table
+Rem
+
+
+Rem
+Rem Insert some data for UPDATE
+Rem 
+
+insert into snips_events values ('testSender', 'testDevice', 'testAddr',
+	'testSubdev', 'testVar', 567, 890, 'testUnits', 3, 4, 123, 1111,
+	98123123, 98456456, '123456789', '987654321');
+insert into snips_events values ('testSender', 'testDevice2', 'testAddr',
+	'testSubdev', 'testVar', 567, 890, 'testUnits', 3, 4, 123, 1111,
+	98123123, 98456456, '123456789', '987654321');
+	
+
+commit;
+
+quit
+

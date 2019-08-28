@@ -1,0 +1,31 @@
+*** main.c	Sun Jul  8 18:48:28 2001
+--- ssl_main.c	Wed May 26 15:32:27 2004
+***************
+*** 39,44 ****
+--- 39,49 ----
+  #include "portmon.h"
+  #undef _MAIN_
+  
++ #ifdef WITH_SSL
++ #include <openssl/ssl.h>
++ SSL_CTX *ctx;
++ #endif
++ 
+  static int	rtimeout = RTIMEOUT;		/* select timeout in seconds */
+  static int	simulconnects = MAXSIMULCONNECTS;
+  struct _harray	*hostlist;			/* global ptr to list */
+***************
+*** 50,55 ****
+--- 55,66 ----
+  {
+    hostlist = NULL;
+    set_functions();
++ #ifdef WITH_SSL
++   SSL_load_error_strings();
++   SSL_library_init();
++   ctx = SSL_CTX_new(SSLv23_client_method());
++   if ( NULL == ctx ) perror ("SSL failed to create context.\n");
++ #endif
+    snips_main(ac, av);
+  }
+    

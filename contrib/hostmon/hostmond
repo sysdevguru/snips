@@ -1,0 +1,505 @@
+#
+# Portions Copyright 1998,1999 MINT, http://www.mint.net/
+#
+# This version has been modified to not accept spawn a server, instead
+# entries should be made in inetd.  Modularity has also been removed.
+# Some monitors have been extended.  This is Linux specific.
+#
+##
+# $Header: /home/vikas/src/nocol/perlnocol/hostmon-osclients/RCS/hostmon-client,v 2.0 1997/02/17 13:08:16 vikas Exp vikas $
+#
+#	hostmon-client.main
+#
+# Part of the NOCOL monitoring package. Run's system commands on the
+# system and prints out system statistics. Output is parsed by the
+# 'hostmon' server program which then generates output in the NOCOL format.
+# Includes systems specific files automatically i.e for LINUX includes
+# hostmon-client.linux etc.  All tests like pstat, df, vmstat are in
+# system specific file.
+#
+#	Copyright 1994, 1997 Vikas Aggarwal, vikas@navya.com
+#
+# Author:  Vikas Aggarwal,  vikas@navya.com
+#
+#
+# See Nocol.COPYRIGHT file for full details.
+##
+############################
+## Variables customization #
+############################
+#
+$sleeptime = 5*60;
+@monitorlist = qw( uptime df iostat mailstat vmstat );
+
+$SENDMAIL = "/usr/lib/sendmail" ;# SET_THIS to location of your 'sendmail'
+
+# Add to the path. Typically sendmail is under /usr/lib/
+$ENV{'PATH'} .= ":/bin:/usr/bin:/sbin:/usr/sbin:/usr/lib" ;
+
+$debug = 0;                             # set to 1 for debugging output
+umask 066;
+ 
+#  The output data filename is "/tmp/<hostname>.hostmon"
+#  This must match the name set in (x)inetd
+$dfile = "/tmp/" . `hostname` ; chop $dfile ; $dfile .= ".hostmon" ;
+#######################################################################
+
+
+##
+##	mailstat
+sub mailstat
+{
+    local ($qsize, $host) = (0, "");
+    local (%NTo);
+    local ($cmd) = "$SENDMAIL -bp";
+    #open(STDERR, ">&STDOUT")		|| die "Can't dup stdout";
+    open(CMD, "$cmd |")	|| return (0);  # dont exit if cmd not found
+    
+    while (<CMD>) {
+	$debug && print STDERR "(debug)mailstat: $_" ;
+	next if (/^[A-Z]+\d+\*?\s+/); # From: this 
+	next if (/deferred|warning|timeout/i);
+	if (/Mail Queue/) {	# Mail Queue (152 requests)
+	    ($x,$y,$paren,$qsize) = split(/[ \(]/);
+	} else {
+	    chop;
+	    ($user,$host) = split(/[@]/);
+	    $host =~ y/A-Z/a-z/; 	# canonicalize lower
+	    $host =~ s/>//g;	 	# watch angle brackets
+	    $host =~ s/^\s*//; 		# remove leading whitespace
+	    $NTo{$host}++;
+	}
+    }
+    close (CMD);
+
+    print "MailQLocal $qsize messages\n";
+    # This was broken... just made it a little more usable --jrl
+
+    local($i) = 0;
+    foreach (sort { $NTo{$b} <=> $NTo{$a} } keys %NTo) {
+        # printing only top 5 hosts
+	($i++ > 4) && last;
+	printf "MailQDest %d messages %s\n", $NTo{$_}, $_;
+    }
+}
+
+###
+### main
+###    
+
+if ($debug) {
+    print STDERR "(debug) MonitorList= @monitorlist\n" ;
+    print STDERR "(debug) Outputfile= $dfile\n";
+}
+
+#included here for your convenience -jrl
+
+###############    BEGIN OF hostmon-client.linux      ####################
+### csh% uptime
+###  12:09pm  up 16 days, 19:58,  5 users,  load average: 0.32, 0.21, 0.01
+###
+
+sub uptime {
+    local ($file) = "/proc/uptime";
+    local ($uptime) = 0;    
+    local ($idletime) = 0;    
+    open (CMD, "<$file");
+    while (<CMD>) {
+	$debug &&  print STDERR "(debug)uptime: $_" ;
+	chop; tr/\r\n//d;
+
+	if ( /^(\d+)\.\d{2} (\d+)\.\d{2}$/ ) {
+		$uptime   = int($1 / 60 );  
+		$idletime = int($2 / 60 ); 
+	    print "Uptime $uptime mins\n";
+	} else { print STDERR "(debug)uptime() : command format unknown\n"; }
+    }	
+    close (CMD);
+&loadavg;
+}
+
+sub loadavg {
+    local ($file) = "/proc/loadavg";
+    local ($load1) = 0;    
+    local ($load5) = 0;    
+    local ($load15) = 0;    
+    open (CMD, "<$file");
+    while (<CMD>) {
+	$debug &&  print STDERR "(debug)loadavg: $_" ;
+	chop; tr/\r\n//d;
+	($load1, $load5, $load15) = split;
+	    print "Load1 $load1 load-1min\n";
+	    print "Load5 $load5 load-5min\n";
+	    print "Load15 $load15 load-15min\n";
+    }	
+    close (CMD);
+}
+
+## df
+# Extract space availability stats. Printing out available MBytes and
+# percent full (together they make sense).
+# Note that this command prints out a number of lines with same variable
+# name (one for each disk). The hostmon server picks out the worst of
+# these lines.
+#
+# linux-vikas> df -k -t ext2
+# Filesystem         1024-blocks  Used Available Capacity Mounted on
+# /dev/hda5              19329   14135     4163     77%   /
+# /dev/hda2             198123  111709    76183     59%   /usr
+# /dev/hda7              19329     119    18179      1%   /spare
+# /dev/hda3              99061   85546     8400     91%   /usr/local
+#
+# linux-vikas> df -i -t ext2
+# Filesystem           Inodes   IUsed   IFree  %IUsed Mounted on
+# /dev/hda5              10320    1589    8731    15%  /
+# /dev/hda2              51200   12254   38946    24%  /usr
+# /dev/hda7              10320      24   10296     0%  /spare
+# /dev/hda3              25584    3509   22075    14%  /usr/local
+#
+sub df {
+
+    open(CMD, "df -k -t ext2 |");
+    while(<CMD>){
+	chop; tr/\r\n//d;
+	if (/^\s*Filesystem/) { next; }    #ignore header line
+	if (/^\s*\S+:\/\S*/)  { next; }    # ignore NFS mounts
+
+	$debug && print STDERR "(debug)df: $_\n";
+	
+	if(/^.*\s+(\d+)\s+(\d+)%\s+(\/\S*)\s*$/)
+	{
+	    printf "DFspace_avail %d MB $3\n", int($1/1000);
+	    printf "DFspace_%%used $2 %%full $3\n";
+	}       
+    }
+    close (CMD);
+    open (CMD, "df -i -t ext2 |");
+    while (<CMD>) {
+	chop; tr/\r\n//d;
+	if (/^\s*Filesystem/)  { next; } # ignore header line
+	
+	$debug && print STDERR "(debug)df: $_\n" ;
+	
+	if (/^.*\s+(\d+)\s+(\d+)%\s+(\/\S*)\s*$/)
+	{
+	    printf "DFinodes_avail $1 inodes $3\n";
+	    printf "DFinodes_%%used $2 %%inodes $3\n";
+	}
+    }
+    close (CMD);
+}	# end &df()
+
+##
+# LINUX DOES NOT SUPPORT IOSTAT
+# but I'll use it for scsi error messages (Buslogic drivers)  -jrl
+# this is _really_ nasty, look the other way -- quick hack, worked 1st time
+##
+sub iostat {
+    local ($flag, $ha);
+    local (@val = '');
+    local ($cmd) = "/proc/scsi/BusLogic";
+
+    if ( -d $cmd ) {
+	opendir (CMD, "$cmd");
+	@ha = readdir CMD;
+	foreach $ha (@ha) {
+	    next if $ha =~ /^\./;
+	    open(FILE, "<$cmd/$ha");
+            $flag = 0;
+	    while (<FILE>) {
+		if ($debug)  { print STDERR "(debug)iostat: $_"; }
+		last if /The driver does not yet support the proc-fs/;
+		next unless ($flag || /ERROR RECOVERY STATISTICS/);
+		$flag = 1;
+		@val = split;
+		/^External Host Adapter Resets:/	&& do {
+			printf "SCSIErr %d count HA:$ha\n", $val[1];
+							next };
+		next unless ($#val == 9 && $val[0] =~ /\d+/ );
+
+		printf "SCSI-Abor %d count HA:$ha/ID:$val[0]\n", $val[1];
+		printf "SCSI-BusErr %d count HA:$ha/ID:$val[0]\n", $val[4];
+		printf "SCSI-HostErr %d count HA:$ha/ID:$val[0]\n", $val[7];
+	    }
+	    close(FILE);
+	}
+	close(CMD);
+    }
+}	# end &iostat()
+
+
+##        vmstat
+# Extract paging, real-memory, cache hits, CPU load, Context switches.
+# Note: Seems like the fields are fixed length, and sometimes there are
+#       no spaces between the output fields.
+# lenny> vmstat 5 2
+#
+# procs            memory    swap        io    system         cpu
+# r b w  swpd  free  buff  si  so   bi   bo   in   cs  us  sy  id
+# 0 0 0  4492   268  2792   0   0    1    0  152   57   6   1  92
+# 0 0 0  4492   268  2792   0   0    0    0  106    7   1   1  98
+## 
+sub oldvmstat {
+    local ($i) = 0;
+    local($dline);
+    local ($cmd) = "vmstat";
+
+    open (CMD, "$cmd 5 2 |");
+
+    while (<CMD>) { $dline = $_; next; }
+
+    # Here we have the last data line from the command above.
+    if ($debug)  { print STDERR "(debug)vmstat: $dline"; }
+    $_ = $dline ;
+    chop; tr/\r\n//d;
+	
+    # if any CPU time is 100, vmstat doesnt have any spaces in it.
+    s/100(\s+\d+){0,2}\s*$/ 100\1/;
+    
+    # I have also found vmstat to mess up the 'cs' field (no space if
+    # it or the sorrounding fields are too long). Hence taking only
+    # 3 digits of the context switches.
+    ###  procs  #  avm  #  fre  #  si   #  so   #   pi  #  po   # disks  #      #    cs     #  us   #  sy   #  id   ######
+    if (/^(\s+\d+){3}\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)(\s+\d+)+\s+\d*((\s|\d)\d\d)\s+(\d+)\s+(\d+)\s+(\d+)\s*$/)
+    {
+	printf "SwapSpace %d MBytes\n", int($2/1000); # used swap, NOT free
+	printf "MemFree %d MB\n", int($3 / 1000); # convert KB to MB
+	printf "SwapIn $5 si\n";
+	printf "SwapOut $6 so\n";
+	printf "CtxtSw $10 rate\n";
+	printf "CPUus $11 %%user\n";
+	printf "CPUsy $12 %%system\n";
+	printf "CPUidle $13 %%idle\n";
+    }
+    close (CMD);
+
+}	# end &vmstat()
+
+##        vmstat
+# Gets /proc/stat info over period and calculates the deltas.
+# Overhauled to use /proc (rather than run vmstat) by jrl (jason@mint.net)
+# Also gets memory info (&memstat) from /proc/meminfo.
+#
+# $ cat /proc/stat
+# cpu  135650857 77980 16378486 403092167
+# disk 6728674 1545970 16211157 0
+# disk_rio 541728 117765 1401368 0
+# disk_wio 6186946 1428205 14809789 0
+# disk_rblk 1255224 345516 2939182 0
+# disk_wblk 12374078 2856596 29619758 0
+# page 12098484 126824066
+# swap 69700 104
+# intr 1522591234 555199490 6553 0 6 220562 0 2 0 0 0 0 942692231 0 1 0 24472389
+# ctxt 350096251
+# btime 859887422
+# processes 3764334
+#
+# translation:
+# cpu         [user] [nice] [sys] [idle]
+# disk        [disk 1-4 ?? (not used here) ??]
+# disk_rio    [disk 1-4 pages read]
+# disk_wio    [disk 1-4 pages written]
+# disk_rblk   [disk 1-4 blocks (1024kB) read]
+# disk_wblk   [disk 1-4 blocks (1024kB) written]
+# page        [page in]  [page out]
+# swap        [swap in]  [swap out]
+# intr        [total interrupts]  [1 - x interrupts]
+# ctxt        [total context switches]
+# btime       [localtime of boot]
+# processes   [total forks]
+#
+## 
+
+sub vmstat {
+    local ($i) = 0;
+    local ($delta = 60); #seconds
+    local ($user = $nice = $sys = $idle = $tot = 0);
+    local (@disk_r = @disk_w = '' );
+    local ($pagein = $pageout = $swapin = $swapout = 0);
+    local ($ctxt = $fork = 0);
+    local ($cmd) = "/proc/stat";
+
+    foreach $run (0, 1) {	# run twice and calculate deltas
+	open (CMD, "<$cmd");
+	while (<CMD>) {
+    	    if ($debug)  { print STDERR "(debug)vmstat: $_"; }
+	    chop; tr/\r\n//d;
+            @val = split;
+	    /^cpu/		&& do {
+				    $user = $val[1] - $user;
+				    $nice = $val[2] - $nice;
+				    $sys  = $val[3] - $sys;
+				    $idle = $val[4] - $idle;
+				    $tot  = ($val[1] + $val[2] +
+                                             $val[3] + $val[4] - $tot);
+				    if ($run) {
+				        printf "CPUuser %d %%user\n", 
+				                      abs($user / $tot * 100);
+				        printf "CPUnice %d %%nice\n", 
+				                      abs($nice / $tot * 100);
+				        printf "CPUsys %d %%system\n",
+				                      abs($sys / $tot * 100);
+				        printf "CPUidle %d %%idle\n",
+				                      abs($idle / $tot * 100);
+				    }
+				next };
+	    /^disk_rblk/	&& do {
+				    for ($i=1 ; $i < 5 ; $i++) {
+				      $disk_r[$i] = $val[$i] - $disk_r[$i] if ($val[$i]);
+                                      if ($run && $val[$i] ) {
+					printf "Disk_r %d kB dev:$i\n",
+						     abs($disk_r[$i]);
+				      }
+				    }
+				next };
+	    /^disk_wblk/	&& do {
+				    for ($i=1 ; $i < 5 ; $i++) {
+				      $disk_w[$i] = $val[$i] - $disk_w[$i] if ($val[$i]);
+                                      if ($run && $val[$i] ) {
+					printf "Disk_w %d kB dev:$i\n",
+						     abs($disk_w[$i]);
+				      }
+				    }
+				next };
+	    /^page/		&& do {
+				    $pagein  = $val[1] - $pagein;
+				    $pageout = $val[2] - $pageout;
+				    if ($run) {
+				        printf "PageIn %d pi\n", 
+				                      abs($pagein);
+				        printf "PageOut %d po\n", 
+				                      abs($pageout);
+				    }
+				next };
+	    /^swap/		&& do {
+				    $swapin  = $val[1] - $swapin;
+				    $swapout = $val[2] - $swapout;
+				    if ($run) {
+				        printf "SwapIn %d si\n", 
+				                      abs($swapin);
+				        printf "SwapOut %d so\n", 
+				                      abs($swapout);
+				    }
+				next };
+	    /^ctxt/		&& do {
+				    $ctxt = $val[1] - $ctxt;
+				    if ($run) {
+				        printf "CtxtSw %d rate\n", 
+				                      abs($ctxt);
+				    }
+				next };
+	    /^processes/	&& do {
+				    $fork = $val[1] - $fork;
+				    if ($run) {
+				        printf "Forks %d rate\n", 
+				                      abs($fork);
+				    }
+				next };
+        }
+        close (CMD);
+        sleep($delta) unless ($run);	# delta time
+    }
+&memstat;
+} #end vmstat
+
+##    memstat
+# Get memory pool information from /proc/meminfo
+# 
+# $ cat /proc/meminfo
+#         total:    used:    free:  shared: buffers:  cached:
+# Mem:  64798720 53006336 11792384 14299136 30744576 10559488
+# Swap: 317050880   356352 316694528
+# MemTotal:     63280 kB
+# MemFree:      11516 kB
+# MemShared:    13964 kB
+# Buffers:      30024 kB
+# Cached:       10312 kB
+# SwapTotal:   309620 kB
+# SwapFree:    309272 kB
+##
+sub memstat {
+    local ($mtot = $stot = $mfree = 0);
+    local (@val = '');
+    local ($cmd = "/proc/meminfo");
+    open (CMD, "<$cmd");
+    while (<CMD>) {
+	if ($debug)  { print STDERR "(debug)memstat: $_"; }
+	chop; tr/\r\n//d;
+	@val = split;
+
+	/^MemTotal:/		&& do { $mtot = $val[1]; next };
+	/^SwapTotal:/		&& do { $stot = $val[1]; next };
+	/^MemFree:/		&& do { $mfree = $val[1]; next };
+
+	/^Buffers:/		&& do {
+		printf "Buffers %d MB\n", int($val[1] / 1024);
+		printf "Buffers%% %d %%buff\n", int($val[1] / $mtot * 100);
+
+                # don't count buffers
+		printf "MemUsed %d MB\n", 
+			int(($mtot - $mfree - $val[1]) / 1024);
+		printf "MemUsed%% %d %%used\n",
+			int(($mtot - $mfree - $val[1]) / $mtot * 100);
+
+		printf "MemFree %d MB\n", 
+			int(($mfree + $val[1]) / 1024);
+		printf "MemFree%% %d %%free\n",
+			int(($mfree + $val[1]) / $mtot * 100);
+
+				next };
+
+	/^Cached:/		&& do {
+		printf "Cached %d MB\n", int($val[1] / 1024);
+		printf "Cached%% %d %%cache\n", int($val[1] / $mtot * 100);
+				next };
+
+	/^SwapFree:/		&& do {
+		printf "SwapFree %d MB\n", int($val[1] / 1024);
+		printf "SwapFree%% %d %%free\n",
+				   int($val[1] / $stot * 100);
+		printf "SwapUsed %d MB\n", int(($stot - $val[1]) / 1024);
+		printf "SwapUsed%% %d %%free\n", 
+				   int(($stot - $val[1]) / $stot * 100);
+				next };
+    }
+    close(CMD);
+} #end memstat
+
+# buslogic errors....
+
+###############      END OF hostmon-client.linux      ####################
+
+local ($passno) = 1;		# keep track of pass number in loop
+local ($tmpfile) = "$dfile" . ".tmp" ; # create temporary output file
+local ($stime, $deltatime);
+local ($restart_dpass) = int(48*3600 /$sleeptime); #restart every 48 hours
+
+select(DFILE);			# select default output file
+
+while (1)
+{
+    $stime = time;
+
+    open (DFILE, "> $tmpfile") ; 
+    print "TIME $stime secs\n";	        # needed in the output
+    foreach $s (@monitorlist) { &$s ;}	# call the subroutines.
+    close (DFILE) ;
+    #print "Moving $tmpfile to $dfile\n";
+    `mv $tmpfile $dfile`;
+    `chmod ugo+r $dfile`;
+
+    $deltatime = time - $stime;              # time to do tests
+    $debug  && print STDERR "(dbg) sleep for= $sleeptime - $deltatime\n";
+    if ($sleeptime > $deltatime) { sleep($sleeptime - $deltatime) ;}
+
+    ## restart to avoid the memory leaks.
+    if (($passno % $restart_dpass) == 0) {
+	$passno = 0;
+	if ( -x $0 ) { $childpid && kill ('TERM', $childpid); sleep 5;
+		       $childpid && kill ('TERM', $childpid); sleep 5;
+		       exec $0 ; # restart
+	}
+    }
+}	# end while(1)
+
+####################  END OF FILE hostmon-client.main   ##################

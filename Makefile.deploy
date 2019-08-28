@@ -1,0 +1,21 @@
+all:
+	make
+
+config:
+
+install: all
+### Breaks
+#.ifdef $(SUDOPASSWD)
+#	echo $(SUDOPASSWD) | sudo -kS -p "" make install
+#	echo $(SUDOPASSWD) | sudo -kS -p "" make root
+#.else
+	sudo make install
+	make root
+#.endif
+	cp utility/snipsprog.init.seds /usr/local/snips/bin/snipsprog.init
+	ln -s /usr/local/snips/bin/pingmon /usr/local/snips/bin/juniperlns
+test:
+	./Configure
+	make
+	make clean
+	make

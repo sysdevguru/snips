@@ -1,0 +1,28 @@
+# $Id: Makefile.mid,v 1.0 2001/07/08 22:48:28 vikas Exp $
+#
+# Makefile for 'portmon'
+#
+# 
+TARG =	portmon
+OBJS = 	main.o portmon.o
+INITFILES = portmon
+
+PROGCDEFS =
+PROGLIBS  =
+
+$(TARG):	$(OBJS)  Makefile
+	$(CC) $(CFLAGS) $(OBJS) $(LIBS) -o $(TARG)
+
+#
+install:  installdir $(TARG)
+	$(INSTALL) $(INSTALLFLAGS) -c -m 751 $(TARG)  $(BINDIR)/
+
+clean:
+	rm -f $(DIRT)
+
+rcs:
+	@echo "Doing 'rcs' in $(TARG)"
+	@-for i in $(OBJS); do \
+		$(CO) -q `basename $$i .o`.c ;\
+	  done
+

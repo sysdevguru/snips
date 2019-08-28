@@ -1,0 +1,137 @@
+Making wash
+rm -rf /usr/obj/ng/snmpapps/012
+mkdir /usr/obj/ng/snmpapps/012
+Links removed
+Making links in /usr/obj/ng/snmpapps/012
+for i in ${SRCDIR}/*; do mklink -RFl "${i}"; done
+Links made
+cd /usr/obj/ng/snmpapps/012
+Making Makefile
+./configure
+creating cache ./config.cache
+checking for mkdirhier... /usr/local/bin/mkdirhier
+using /usr/local/bin/mkdirhier
+checking for gcc... cc
+checking whether the C compiler (cc -xO4 -xdepend ) works... yes
+checking whether the C compiler (cc -xO4 -xdepend ) is a cross-compiler... no
+checking whether we are using GNU C... no
+checking for a BSD compatible install... /usr/local/bin/install -c
+checking whether ln -s works... yes
+checking for ranlib... ranlib
+checking host system type... sparc-sun-solaris2.6
+checking for non-GNU ld... /usr/ccs/bin/ld
+checking if the linker (/usr/ccs/bin/ld) is GNU ld... no
+checking for BSD-compatible nm... /usr/ccs/bin/nm -p
+checking whether we are using GNU C... no
+checking for cc option to produce PIC... -KPIC
+checking if cc PIC flag -KPIC works... no
+checking if cc static flag -Bstatic works... -Bstatic
+checking if the linker (/usr/ccs/bin/ld) is GNU ld... no
+checking whether the linker (/usr/ccs/bin/ld) supports shared libraries... yes
+checking command to parse /usr/ccs/bin/nm -p output... yes
+checking how to hardcode library paths into programs... immediate
+checking for /usr/ccs/bin/ld option to reload object files... -r
+checking dynamic linker characteristics... solaris2.6 ld.so
+checking if libtool supports shared libraries... no
+checking whether to build shared libraries... no
+checking whether to build static libraries... yes
+checking for objdir... .libs
+creating libtool
+checking for perl5... /usr/local/bin/perl5
+checking how to run the C preprocessor... cc -E
+checking for ANSI C header files... yes
+checking for sys/file.h... yes
+checking for sys/ioctl.h... yes
+checking for sys/time.h... yes
+checking for syslog.h... yes
+checking for memory.h... yes
+checking for sys/sockio.h... yes
+checking for stdlib.h... yes
+checking for unistd.h... yes
+checking for utmpx.h... yes
+checking for off_t... yes
+checking whether time.h and sys/time.h may both be included... yes
+checking whether struct tm is in sys/time.h or time.h... time.h
+checking for gettimeofday... yes
+checking for select... yes
+checking for socket... no
+checking for strdup... yes
+checking for getutent... yes
+checking for connect... no
+checking for main in -lsocket... yes
+checking for gethostbyname... no
+checking for main in -lnsl... yes
+checking for system network libs... using -lsocket -lnsl
+checking for CMU SNMP... found in /usr/local
+updating cache ./config.cache
+creating ./config.status
+creating Makefile
+creating config.h
+cd /usr/obj/ng/snmpapps/012
+make all
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H  -c  snmpstatus.c
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -DCMU_SNMPAPPS_VERSION="\"`head -1 VERSION`\"" -c version.c -o version.o 
+/bin/sh ./libtool cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpstatus snmpstatus.o version.o -rpath /usr/local/lib  -lsocket -lnsl -L/usr/local/lib -lsnmp
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpstatus snmpstatus.o version.o -lsocket -lnsl -L/usr/local/lib -lsnmp -R/usr/local/lib
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H  -c  snmpget.c
+/bin/sh ./libtool cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpget snmpget.o version.o -rpath /usr/local/lib  -lsocket -lnsl -L/usr/local/lib -lsnmp
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpget snmpget.o version.o -lsocket -lnsl -L/usr/local/lib -lsnmp -R/usr/local/lib
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H  -c  snmpwalk.c
+/bin/sh ./libtool cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpwalk snmpwalk.o version.o -rpath /usr/local/lib  -lsocket -lnsl -L/usr/local/lib -lsnmp
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpwalk snmpwalk.o version.o -lsocket -lnsl -L/usr/local/lib -lsnmp -R/usr/local/lib
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H  -c  snmptranslate.c
+/bin/sh ./libtool cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmptranslate snmptranslate.o version.o -rpath /usr/local/lib  -lsocket -lnsl -L/usr/local/lib -lsnmp
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmptranslate snmptranslate.o version.o -lsocket -lnsl -L/usr/local/lib -lsnmp -R/usr/local/lib
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H  -c  snmpgetnext.c
+/bin/sh ./libtool cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpgetnext snmpgetnext.o version.o -rpath /usr/local/lib  -lsocket -lnsl -L/usr/local/lib -lsnmp
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpgetnext snmpgetnext.o version.o -lsocket -lnsl -L/usr/local/lib -lsnmp -R/usr/local/lib
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H  -c  snmptrap.c
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H  -c  uptime.c
+/bin/sh ./libtool cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmptrap snmptrap.o uptime.o version.o -rpath /usr/local/lib  -lsocket -lnsl -L/usr/local/lib -lsnmp
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmptrap snmptrap.o uptime.o version.o -lsocket -lnsl -L/usr/local/lib -lsnmp -R/usr/local/lib
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H  -c  snmptest.c
+/bin/sh ./libtool cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmptest snmptest.o version.o -rpath /usr/local/lib  -lsocket -lnsl -L/usr/local/lib -lsnmp
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmptest snmptest.o version.o -lsocket -lnsl -L/usr/local/lib -lsnmp -R/usr/local/lib
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H  -c  snmptrapd.c
+/bin/sh ./libtool cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmptrapd snmptrapd.o version.o -rpath /usr/local/lib  -lsocket -lnsl -L/usr/local/lib -lsnmp
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmptrapd snmptrapd.o version.o -lsocket -lnsl -L/usr/local/lib -lsnmp -R/usr/local/lib
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H  -c  snmptrap2.c
+/bin/sh ./libtool cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmptrap2 snmptrap2.o version.o -rpath /usr/local/lib  -lsocket -lnsl -L/usr/local/lib -lsnmp
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmptrap2 snmptrap2.o version.o -lsocket -lnsl -L/usr/local/lib -lsnmp -R/usr/local/lib
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H  -c  snmpdelta.c
+/bin/sh ./libtool cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpdelta snmpdelta.o version.o -rpath /usr/local/lib  -lsocket -lnsl -L/usr/local/lib -lsnmp
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpdelta snmpdelta.o version.o -lsocket -lnsl -L/usr/local/lib -lsnmp -R/usr/local/lib
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H  -c  snmpset.c
+/bin/sh ./libtool cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpset snmpset.o version.o -rpath /usr/local/lib  -lsocket -lnsl -L/usr/local/lib -lsnmp
+cc -xO4 -xdepend -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpset snmpset.o version.o -lsocket -lnsl -L/usr/local/lib -lsnmp -R/usr/local/lib
+Make all in /usr/obj/ng/snmpapps/012 successful
+Making install in /usr/obj/ng/snmpapps/012
+make prefix=/afs/andrew.cmu.edu/system/dest/@sys/ng/snmpapps/012 exec_prefix=/afs/andrew.cmu.edu/system/dest/@sys/ng/snmpapps/012 install
+/usr/local/bin/perl5 make-manpages.pl snmpstatus snmpget snmpwalk snmptranslate  snmpgetnext snmptrap snmptest snmptrapd  snmptrap2 snmpdelta snmpset
+Generating manpage for snmpstatus...Done.
+Generating manpage for snmpget...Done.
+Generating manpage for snmpwalk...Done.
+Generating manpage for snmptranslate...Done.
+Generating manpage for snmpgetnext...Done.
+Generating manpage for snmptrap...Done.
+Generating manpage for snmptest...Done.
+Generating manpage for snmptrapd...Done.
+Generating manpage for snmptrap2...Done.
+Generating manpage for snmpdelta...Done.
+Generating manpage for snmpset...Done.
+/usr/local/bin/mkdirhier /afs/andrew.cmu.edu/system/dest/@sys/ng/snmpapps/012/bin /afs/andrew.cmu.edu/system/dest/@sys/ng/snmpapps/012/man/man1
+Installing snmpstatus...
+Installing snmpget...
+Installing snmpwalk...
+Installing snmptranslate...
+Installing snmpgetnext...
+Installing snmptrap...
+Installing snmptest...
+Installing snmptrapd...
+Installing snmptrap2...
+Installing snmpdelta...
+Installing snmpset...
+Install complete
+rm -rf /usr/obj/ng/snmpapps/012
+mkdir /usr/obj/ng/snmpapps/012
+Links removed

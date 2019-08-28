@@ -1,0 +1,13 @@
+#
+# Config file for 'ntpmon'. Flags error if the time stratum of the
+# machine matches or falls worse than the configured thresholds.
+#
+POLLINTERVAL	300
+
+# To enable RRDtool data collection
+RRDTOOL  ON
+
+#					MINIMUM NTP STRATUM
+# name		address			warn	error	critical
+solar		198.138.178.11 		4	10	15
+freebird	198.23.3.4		2	6	8

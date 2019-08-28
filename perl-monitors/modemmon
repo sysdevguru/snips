@@ -1,0 +1,177 @@
+#!/usr/local/bin/perl -w
+
+# $Header: /home/cvsroot/snips/perl-monitors/modemmon,v 1.0 2001/07/09 04:33:20 vikas Exp $
+#
+#        modemmon - perl monitor for modem line's usage on cisco's
+#
+#	Copyright 2000. Netplex Technologies Inc. (info@netplex-tech.com)
+#
+# Modemmon  reads a list of cisco terminal servers to monitor (from
+# a config file) and thresholds. It then logs into the cisco's and
+# counts the number of lines in use. When the used lines exceeds the
+# thresholds, the lines are displayed in SNIPS data format.
+# Requires the 'rcisco' program for logging into the cisco specified.
+# Identifies dialin lines from the description field of the lines.
+#
+# Snips event elements used:
+#   sender                     "modemmon"
+#   severity                   as read from the config file
+#   device
+#    name                      the cisco name
+#    addr                      cisco IP address
+#   var                       
+#    name                      "ModemLines"
+#    value                     1 means at Info level
+#    threshold                 as read from the config file
+#    units                     always "Usage"
+#
+## 
+##
+
+use strict;
+use vars qw ( $snipsroot $rcisco $debug
+	      $rprog $rpasswd $rcommand $varname $varunits @items
+	      %wlevel  %elevel  %clevel
+	    );
+
+BEGIN {
+  $snipsroot = "/usr/local/snips"  unless $snipsroot;	# SET_THIS
+  push (@INC, "$snipsroot/etc"); push (@INC, "$snipsroot/bin");
+  require "snipsperl.conf" ;		# local customizations
+}
+
+use SNIPS;
+
+############################
+## Variables customization #  overrides values in the snipslib.pl library
+############################
+$rprog="$rcisco";			# Path for rcisco.
+$rpasswd="";				# if NULL, uses the default in rcisco
+$rcommand="who";
+
+#$rprog="/usr/bin/finger";		# if using 'finger' instead
+#$rcommand="-s \@";
+
+$varname="ModemLines";
+$varunits="Usage" ;			# the var.units field in EVENT struct
+$s_pollinterval=60*5;			# Seconds to sleep between tries.
+$debug = 0;				# set to 1 for debugging output
+############################
+
+-x $rprog || die("Could not find executable $rprog, exiting");
+
+##
+# Read the config file. Use '\t' as a separator for 'item'
+sub readconf {
+  my $event = new_event();
+  my $lineno = 0;
+
+  if ($debug == 0 && $libdebug > 0) {
+    $debug = $libdebug;
+    $libdebug = 1 if ($debug > 1) ;
+  }
+  $s_sender = 'modemmon' if ($s_sender eq "");
+
+  undef @items; undef %wlevel; undef %elevel; undef %clevel;
+  open(CONFIG,"<$s_configfile")||die("Couldn't find $s_configfile, exiting");
+  my $datafd = open_datafile($s_datafile, "w");
+  alter_event($event, $s_sender, undef, undef, undef, $varname, $varunits);
+
+  while(<CONFIG>)
+  {
+    ++$lineno;
+    chomp;
+
+    if(/^\s*\#/) {next;}   # skip comments
+    if(/^\s*$/)  {next;}   # skip blank lines
+    if (/^\s*RRDTOOL\s+ON/i)  { $SNIPS::dorrd = 1; next; }
+    if (/^\s*RRDTOOL\s+OFF/i) { $SNIPS::dorrd = 0; next; }
+    if (/^(sleepinterval)\s+(\d+)\s*$/i || /^(pollinterval)\s+(\d+)\s*$/i) {
+      $s_pollinterval = $2;
+      next;
+    }
+    if (/\s*(\S+)\s+(\S+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$/)
+    {
+      my $item="$1\t$2" ;		# the name and address
+      ($wlevel{$item}, $elevel{$item}, $clevel{$item}) = ($3, $4, $5);
+      push(@items,$item);
+      alter_event($event, undef, $1, $2, undef, undef, undef);
+      write_event($datafd, $event);
+      next;
+    }
+
+    print "[$lineno] Ignoring illegal line: $_\n";
+    
+  }				# end while(CONFIG)
+  
+  close(CONFIG);
+  if(0>$#items){die("Nothing to monitor in $s_configfile, exiting")};
+  if ($debug) {
+    print "Items are:\n"; foreach (@items) { print "\t$_\n" } ;
+  }
+}		# end: readconf
+
+## Check state of each router
+#
+sub dotest {
+  my ($event, $i) = @_;	# $i starts from 1, not 0
+  my ($acount, $isok, $loginok) = (0, 0, 0);
+  my $command;
+
+  my $item = $items[$i - 1];	# start index from 0, not 1
+  my ($routername, $routerip) = split(/\t/, $item);
+
+  $debug &&  print "Checking $routername\n";
+
+  if ($rprog =~ /rcisco/) {
+    $command="$rprog $routerip ".' "'."$rpasswd".'" '.'"'."$rcommand".'"';
+  } else {
+    $command="$rprog $rcommand $routerip";
+  }
+  
+  $debug && print "(debug) dotest: running command $command\n";
+
+  open (ROUTER, "$command|") ;
+	
+  while(<ROUTER>)
+  {
+    tr/\r\n//d;
+    if ($rprog =~ /rcisco/)
+    {
+      if ( />/ ) {$loginok = 1 ;} # got the 'Router>' prompt
+      if ( /Dial-in/ )  {$acount += 1 ;}
+      elsif ($debug > 2) { print "(debug) skipping line: $_\n" ; }
+    } 
+    else {		# using finger command
+      if ( /login|logged|user/i ) {$loginok = 1 ;}	# got a real response
+      if (substr($_, 32, 4) =~ /S\d+/ || substr($_, 5, 3) eq "tty") {
+	$acount += 1 ;
+      }
+      elsif ($debug > 2) { print "(debug) skipping line: $_\n" ; }
+    }
+
+  }	# while(ROUTER)
+  close (ROUTER);
+  # sleep 5 ;			# process needs to die off ??
+
+  if ($loginok == 0) { 
+    print "Login into router $routername ($routerip) failed\n" ;
+    $acount = 999;
+  }
+  if ($debug) {print "Number of users= $acount\n" ;}
+
+  my ($status, $threshold, $maxseverity) =
+    calc_status($acount, $wlevel{$item}, $elevel{$item}, $clevel{$item});
+
+  # 	status, value, thres, maxseverity
+  return ($status, $acount, $threshold, $maxseverity);
+
+}	# end &dotest()
+
+
+###
+### Main program:
+###
+
+&snips_main(\&readconf, undef, \&dotest);
+

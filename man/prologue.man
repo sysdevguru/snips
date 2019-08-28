@@ -1,0 +1,10 @@
+.SH DISTRIBUTION
+This program is part of the SNIPS montioring software, available from
+http://www.netplex-tech.com/software/
+.SH SEE ALSO
+snipstv(1) snipsweb(1) tksnips(1)
+snips-perl(3)
+snips(8)
+etherload(8) nsmon(8) ntpmon(8) pingmon(8) portmon(8) radiusmon(8) tpmon(8)
+trapmon(8) snipslogd(8) snips-utility(8)
+

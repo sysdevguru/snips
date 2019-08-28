@@ -1,0 +1,43 @@
+		UPGRADING FROM NOCOL 4.x TO SNIPS
+
+SNIPS uses an enhanced EVENT data structure which shows the state of the
+previous polls (rating), etc. It should be installed in a separate directory
+from previous NOCOL installations (e.g. /usr/local/snips).
+
+The display programs can be compiled to look at  NOCOL format data files
+files also by compiling using the -DNOCOL flags (Configure asks this
+question while compiling).
+
+Other noticable changes between SNIPS and NOCOL:
+
+1. All the old NOCOL config files are readable by the SNIPS monitors. However,
+   the new SNIPS monitors permit additional configuration options (such as 
+   RRDtool, ippingmon-confg allows customizing pkt loss thresholds, etc.).
+
+2. All perl and web configurations stored in
+
+	snipsperl.conf
+	snipsweb-confg
+   Both of these files are located under $ROOTDIR/etc/
+
+3. The default location of the device specific HELP files for snipsweb
+   is now  $ROOTDIR/device-help/ (used by snipsweb.cgi). In NOCOL this
+   location was $ROOTDIR/helpfiles/ 
+
+4. snmpmon-client is now replaced with snmpmon-collector and the
+   config file for 'snmpmon' and 'snmpmon-collector' is now consolidated
+   in 'snmpmon-confg' (there is no separate config file for snmpmon-client
+   or snmpmon-collector). The list of devices starts with a STARTDEVICES
+   line in snmpmon-confg. You can just append your old snmpmon-client-confg
+   file to the bottom of snmpmon-confg after a STARTDEVICES keyword.
+
+5. More consistent use of 'site.address' in all the monitors. The site.name
+   can have comments, etc. depending on the monitor (e.g. upsmon), but the
+   site address is representative of the device being monitored. These
+   changes affect:
+
+     snmpmon: site.name field is the comment, site.addr is device name/ip
+
+6. All references to 'site' in the EVENT data structure has been replaced
+   with the more appropriate 'device' (e.g. EVENT.device.name instead of
+   the earlier EVENT.site.name).

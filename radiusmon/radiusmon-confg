@@ -1,0 +1,29 @@
+#
+# Config file for 'radiusmon'.
+#
+# REMEMBER TO MAKE THIS FILE UNREADABLE TO ANYONE EXCEPT USER 'snips'
+# SINCE IT CONTAINS YOUR TERMINAL SERVERS 'secret'.
+#
+# You have to enter the snips host's name and secret in your raddb/clients
+# file (for the radius server).
+#
+#
+
+## this is in seconds
+POLLINTERVAL	15
+
+# To enable RRDtool data collection
+RRDTOOL  ON
+
+## You can specify an optional timeout (in secs) and retries. Default
+#  timeout is 5 secs and 2 retries.
+#  Some radius servers need an explicit NAS port type (e.g. radquery -T 0).
+#  By default, this is not sent to the radius server.
+#
+# hostname   address         port  secret   username  password  [timeout [retries] [porttype] ]
+# --------   -------         ----  ------   --------  --------
+solar        198.138.178.11  1645  r1dius   test      test1ing
+freebird     198.23.3.4      1645  fr11me   radtest   radpasswd   7   5
+nuisance     198.1.2.3       1645  fr2      radtest   radpasswd   7   5  0
+#
+

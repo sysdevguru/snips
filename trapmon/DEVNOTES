@@ -1,0 +1,8 @@
+			 DEVNOTES for trapmon
+
+1. No config file.
+
+2. Needs to expire old traps after 30 minutes. Directly escalates
+   events to max severity for that trap type.
+
+3. Does not handle SIGHUP (not needed since no config file).

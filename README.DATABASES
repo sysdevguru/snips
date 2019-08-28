@@ -1,0 +1,16 @@
+Database support for SNIPS has NOT been completed.
+
+The following files were the beginning of an attempt to add database
+support to SNIPS. The API's being developed were for ODBC (using libiodbc)
+and Oracle (using the OCI C interface).
+
+	README.MYSQL
+	README.ORACLE
+
+	lib/odbc_api.c
+	lib/oracle_api.c
+
+This has NOT been tested or integrated into the SNIPS code.
+
+	-vikas@navya.com
+	Feb 2001

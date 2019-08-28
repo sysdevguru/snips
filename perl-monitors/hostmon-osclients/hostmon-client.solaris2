@@ -1,0 +1,378 @@
+#!/usr/local/bin/perl
+
+#           ########  hostmon-client.solaris #######
+#
+## $Header: /home/cvsroot/snips/perl-monitors/hostmon-osclients/hostmon-client.solaris2,v 1.2 2003/07/03 17:50:08 ean Exp $
+#
+# This file is appended by 'hostmon-client'
+#
+###
+# All the following functions must print out the following:
+#   		VARIABLE VALUE UNITS COMMENT
+# For variables that are part of a varying maximum, normalize it and give
+# the percentage instead (e.g. free memory, etc.)
+###
+###
+use strict;
+use vars qw($debug $onfscalls $onfsretries $otimeo $otcpnfscalls $otcptimeo);
+
+### csh% uptime
+###  12:09pm  up 16 days, 19:58,  5 users,  load average: 0.32, 0.21, 0.01
+###
+sub uptime {
+  my $cmd = "/usr/ucb/uptime";
+  my $value = -1 ;
+  my $uptime = 0;    
+  open (CMD, "$cmd |");
+  while (<CMD>) {
+    $debug &&  print STDERR "(debug)uptime: $_" ;
+    chomp;
+    
+    if ( /^.*up\s+(\d+)\s+day.*,\s*(\d+):(\d+),.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ ) {
+      $uptime = ($1 * 1440) + ($2 * 60) + $3;
+      printf "Uptime %d mins\n", $uptime;
+      printf "Load5 %d load-5min\n", int($5) ;
+      last ;
+    }
+    elsif (/^.*up\s+(\d+)\s+day.*,\s*(\d+)\s+min.*,.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ ) {
+      $uptime = ($1 * 1440) + $2;
+      printf "Uptime %d mins\n", $uptime;
+      printf "Load5 %d load-5min\n", int($4) ;
+      last;
+    }
+    elsif ( /^.*up\s+(\d+):(\d+),.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ ) {
+      $uptime = ($1 * 60) + $2;
+      printf "Uptime %d mins\n", $uptime;
+      printf "Load5 %d load-5min\n", int($4) ;
+      last ;
+    }
+    elsif ( /^.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ ) {
+      printf "Load5 %d load-5min\n", int($2) ;
+      last ;
+    }
+    else { print STDERR "(debug)uptime() : command format not understood.\n"; }
+  }	
+  close (CMD);
+  
+  #    print "Load 9999 load UnParseableInput\n";
+}
+
+###
+# NOT SUPPORTED ON SOLARIS2
+#
+sub pstat {
+  return;
+}				# end &pstat()
+
+### nfsstat
+# Have to calculate deltas in each pass since the nfsstat command does not
+# give us 'rate' over a time period.  
+# STORE THE OLD VALUES IN EACH PASS AND CALC DELTA EACH TIME.
+#
+# DWN: Additionally, nfsstat on BSDI does not yet give the ability to
+# restrict the output to client/server or RPC/NFS, so we have to look
+# at the header lines.
+#
+# Timeouts are not the same as retries!  Timeouts to reflect problems 
+# communicating to the server (nfs server not responding), which in turn
+# is indicated by successive retries on a NFS request.  The cause for the
+# retry may be local socket blockage, network loss, or a busy server.
+#
+# sunos4-vikas> nfsstat -rc
+#
+# Client rpc:
+# calls    badcalls retrans  badxid   timeout  wait     newcred  timers
+# 7915078  52102    0        345      52073    0        0        7164     
+# New version with NFS3
+# Client rpc:
+# Connection oriented:
+# calls       badcalls    badxids     timeouts    newcreds    badverfs
+# 425826      12          1           0           0           0
+# timers      cantconn    nomem       interrupts
+# 0           0           0           1
+# Connectionless:
+# calls       badcalls    retrans     badxids     timeouts    newcreds
+# 24047       4           6           0           6           0
+# badverfs    timers      nomem       cantsend
+# 0           147         0           0
+#
+sub nfsstat {
+  my $cmd = "nfsstat";
+  my ($dcalls, $dtimeo, $dretries, $tvalue, $rvalue);
+  my $tcp;
+open (CMD, "$cmd -rc |");	# '-rc' for client related data only
+while (<CMD>) {
+  chomp;
+  if (/:/) {
+    $tcp = ($_ =~ /connection oriented:/i); # A boolean result
+    next;
+  }
+				# rate =  timeout/calls
+  if (/^\s*(\d+)\s+\d+\s+(\d+)\s+(\d+)\s+(\d+).*$/ )  {
+    $debug && print STDERR "(debug)nfsstat: $_\n" ;
+    if ($tcp) {
+      $dcalls = $1 - $otcpnfscalls ; $otcpnfscalls = $1 ;
+      $dtimeo = $3 - $otcptimeo ; $otcptimeo = $3 ;
+    } else {
+      $dcalls = $1 - $onfscalls ; $onfscalls = $1 ;
+      $dretries = $2 - $onfsretries ; $onfsretries = $2 ;
+      $dtimeo = $4 - $otimeo ; $otimeo = $4 ;
+    }
+    last ;			# no more lines
+  }
+}				# end (while)
+close (CMD);
+
+if ($dcalls == 0) { $tvalue = 0 ; $rvalue = 0;}
+else {
+  $tvalue = int($dtimeo * 100 / $dcalls); # calc timeout rate
+  $rvalue = int($dretries * 100 / $dcalls); # calc retry rate
+}
+
+if ($debug) { print STDERR "(debug)nfsstat: $dtimeo/$dcalls\n" ;}
+print "NFStimeouts $tvalue %timeouts\n";
+print "NFSretries $rvalue %retries\n";
+
+}				# end &nfsstat()
+
+## df
+# Extract space availability stats. Printing out available MBytes and
+# percent full (together they make sense).
+# Note that this command prints out a number of lines with same variable
+# name (one for each disk). The hostmon server picks out the worst of
+# these lines.
+#
+# sun41-vikas> df -t 4.2
+#   Filesystem            kbytes    used   avail capacity  Mounted on
+#   /dev/sd0a              24239   12492    9324    57%    /
+#   /dev/sd0g             191919  149692   23036    87%    /usr
+#   /dev/sd3c            1230152 1062490   44647    96%    /usr/local
+#
+# bsdi-doug> df -i
+#   Filesystem  1K-blocks  Used  Avail Capacity iused ifree %iused Mounted on
+#    /dev/sd0a     7979    5877    1304    82%     631  3207  16%   /
+#    flsvr:/vol/cvs 953478  699853  158277 82%       0    0   100%  /vol/cvs
+#
+sub df {
+  
+  open (CMD, "/bin/df -k -l |"); # /bin/df -F ufs -k -l
+  
+  while (<CMD>) {
+    chomp;
+    if (/^\s*filesystem/)  { next; } # ignore header line
+    # if (/^\/dev\/dsk\/0s3/)  { next; }# just skip the SVR4 specific 
+    if (/^\s*\/proc/)  { next; } # OS type filesystems
+    if (/^\s*\/hinv/)  { next; }
+    if (/^\s*fd/)  { next; }
+    if (/^\s*mnttab/)  { next; }
+    if (m@:@) { next; }		# skip NFS mounts
+    if (m@^\s*/vol/@) { next; }	# vold mounts (floppies, CD's)
+    
+    $debug && print STDERR "(debug)df: $_\n" ;
+    
+    if (/^.*\s+(\d+)\s+(\d+)%\s+(\/\S*)\s*$/)
+    {
+      printf "DFspace_avail %d MB $3\n", int($1/1024);
+      print "DFspace_\%used $2 \%full $3\n";
+    }
+  }
+  close (CMD);
+  
+  open (CMD, "/usr/ucb/df -i |"); # note 'ucb' version
+  
+  while (<CMD>) {
+    chomp;
+    if (/^\s*Filesystem/)  { next; } # ignore header line
+    
+    $debug && print STDERR "(debug)df: $_\n" ;
+    
+    if (/^.*\s+(\d+)\s+(\d+)\s+(\d+)%\s+(\/\S*)\s*$/)
+    {
+      print "DFinodes_avail $2 inodes $4\n";
+      print "DFinodes_\%used $3 \%inodes $4\n";
+    }
+  }
+  close (CMD);
+  
+}				# end &df()
+
+##
+#
+# solaris> iostat -d 5 3
+#          fd0           sd1           sd3 
+# Kps tps serv  Kps tps serv  Kps tps serv 
+#   0   0    0    2   0   29    0   0  152 
+#   0   0    0    0   0    0    0   0    0 
+#
+##
+sub iostat {
+  my $cmd = "iostat";
+  my ($str, $diskno, $numdisks);
+  my @IOname;
+
+open (CMD, "$cmd -d 5 3|");
+
+while (<CMD>) {
+  chomp;
+  $str = $_ ;
+  if (/\s+msps|tps\s+/) { next; } # ignore header line
+  if (/^\s+[A-z]+/) {		# header line containing disk names...
+    if ($debug)  { print STDERR "(debug)iostat: $_\n"; }
+    $diskno = 0;
+    while ( $str =~ /\s*(\w+)\s+/ ) {
+      if ( $1 eq 'tty' ) { $str = $'; next; } # BSDI lists 'tty'
+      if ( $1 eq 'cpu' ) { $str = $'; last; } # 'cpu' is not a disk 
+      $str = $' ;		# remaining string
+      $IOname[++$diskno] = $1;	# extract the name of disk
+    }				# end while()
+  }
+  
+}				# end: while(<CMD>)
+close (CMD);
+
+# Here we have the last line from the command above
+if ($debug)  { print STDERR "(debug)iostat: $str\n"; }
+$diskno = 0;
+while ($str =~ /\s*\d+\s+\d+\s+(\d+\.\d+)/) # extract decimal msps
+{
+  ++$diskno; $str = $' ;	# remaining string
+  print "IOseek $1 msps $IOname[$diskno]\n"; # seek time, msecs/seek
+}
+
+# Now run with the -D option to extract utilization for SunOS-4.x
+
+open (CMD, "$cmd -D 5 3 |");
+
+while (<CMD>) {
+  chomp;
+  $str = $_;
+  if (/\s+util\s*/) { next; }	# ignore header line
+  if (/^\s+[A-z]+/) {		# header line containing disk names...
+    if ($debug)  { print STDERR "(debug)iostat: $_\n"; }
+    $diskno = 0;
+    while ( $str =~ /\s*(\w+)\s+/ ) {
+      $str = $' ;		# remaining string
+      $IOname[++$diskno] = $1;	# extract the name of disk
+    }
+  }
+}				# end: while()
+close (CMD);
+
+# Here we have the last line from the command above
+if ($debug)  { print STDERR "(debug)iostat: $str\n"; }
+$diskno =0;
+while ($str =~ /\s*\d+\s+\d+\s+(\d+\.\d+)/ ) # decimal utilization
+{
+  ++$diskno; $str = $' ;	# remaining string
+  print "IObw $1 %util $IOname[$diskno]\n";
+}
+}				# end &iostat()
+
+
+##        vmstat
+# Extract paging, real-memory, cache hits, CPU load, Context switches.
+# Note: Seems like the fields are fixed length, and sometimes there are
+#       no spaces between the output fields.
+#
+# solaris> vmstat -S 5 2
+# procs     memory            page            disk          faults      cpu
+# r b w   swap  free  si  so pi po fr de sr f0 s1 s3 --   in   sy   cs us sy id
+# 0 0 0   4772  3640   0   0  0  0  0  0  0  0  0  0  0    3   21   16  1  1 97
+# 0 0 0 281636  3700   0   0  0  0  0  0  0  0  0  0  0    8   20   18  0  2 98
+#
+## 
+sub vmstat {
+  my $i = 0;
+  my $dline;
+  my $cmd = "/bin/vmstat -S";
+  
+  open (CMD, "$cmd 5 2 |");
+  
+  while (<CMD>) { $dline = $_; next; }
+  
+  # Here we have the last data line from the command above.
+  if ($debug)  { print STDERR "(debug)vmstat: $dline"; }
+  $_ = $dline ;
+  chomp;
+  
+  # if any CPU time is 100, vmstat doesnt have any spaces in it.
+  s/100(\s+\d+){0,2}\s*$/ 100$1/;
+  
+  # I have also found vmstat to mess up the 'cs' field (no space if
+  # it or the surrounding fields are too long). Perhaps fixed in Solaris ?
+  
+  ### ON Solaris 2.6 & 2.5
+  ###  r b w   swap  free  si  so pi po fr de sr f0 s0 s1 s5   in   sy   cs us sy id ###
+  
+  if (/^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$/)
+  {
+    #    printf("DEBUG: %s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n", $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22);
+    
+    printf "MemFree %d MB\n", int($5 / 1024); # convert KB to MB
+    printf "SwapSpace %d MB\n", int($4 / 1024);
+    print "SwapIn $6 si\n";
+    print "SwapOut $7 so\n";
+    print "PageIn $8 pi\n";
+    print "PageOut $9 po\n";
+    print "CtxtSw $19 rate\n";
+    print "CPUus $20 %user\n";
+    print "CPUsy $21 %system\n";
+    print "CPUidle $22 %idle\n";
+    
+  }
+  else
+  {
+    print STDERR "ERROR: unable to parse vmstat output - argh!!" if ($debug);
+  }
+  
+  close (CMD);
+  
+}				# end &vmstat()
+
+
+##       netstat
+# Extract collision and error rates. Luckily, on SunOS there is an option
+# for printing out the delta values. Since there is no easy way to 
+# terminate the command after displaying 5 lines, forcibly close the
+# command stream.
+# Ignore the first few lines, look at the 5th and then forcibly close.
+# Since the command only displays one interface's data, we look at the
+# 'totals' field.
+#
+#  sunos> netstat 5
+#       input   (le0)     output           input  (Total)    output       
+#  packets errs  packets errs  colls  packets errs  packets errs  colls  
+#   <first line with total values, ignore>
+#  1467    0     64      0     0      1467    0     64      0     0     
+#  1584    0     96      0     1      1584    0     96      0     1     
+#
+#
+# 
+sub netstat {
+  my $i = 0;
+  my $cmd = "/bin/netstat";
+  
+  my $pid = open (CMD, "$cmd -i 10 |");	# 10 second sampling
+  while (<CMD>) {
+    if (/^\s+[A-z]+/) { next; }	# ignore header lines if any
+    if (++$i < 3)  { next ;}	# ignore first 3 lines
+    chomp;
+    $debug && print STDERR "(debug)netstat: $_\n" ;
+    
+    if (/^\s*\d+(\s+\d+)*\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$/)
+    {
+      my ($ipkts, $opkts) = ($2, $4);
+      
+      if ($ipkts == 0) { $ipkts = 1; } # avoid division by zero
+      if ($opkts == 0) { $opkts = 1; }
+      printf "NetIErr %d PktRate\n", int ($3 * 100 / $ipkts);
+      printf "NetOErr %d PktRate\n", int ($5 * 100 / $opkts);
+      printf "NetColl %d PktRate\n", int ($6 * 100 / $opkts);
+    }
+    kill ('TERM', $pid) ; last ; # no more lines
+  }	
+  close (CMD);
+}				# end &netstat()
+
+
+1;

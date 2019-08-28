@@ -1,0 +1,243 @@
+#!/bin/sh
+#
+# Configure file for snips
+
+OPATH=$PATH
+PATH=/bin:/usr/bin:/sbin:/usr/sbin:/etc:/usr/etc
+PATH=${PATH}:/usr/ucb:/usr/bsd:/usr/local/bin:/usr/local/gnu/bin:${OPATH}
+
+package="snips"
+PACKAGE=`echo $package | tr [a-z] [A-Z]`
+
+PREVDEFS=Config.cache
+SEDFILE=config.sed
+TMPFILE=tmp.file
+OS="`uname -s -r`"
+
+# If   'install -c -m 755 src dest'  fails on the system...
+MYINSTALL="`pwd`/utility/myinstall"
+
+# required variables
+ROOTDIR="/usr/local/$package"
+SRCDIR="`pwd`"
+MANDIR="${ROOTDIR}/man"
+MANEXT="n"
+OPSMAIL="iris-notify@irisns.com"
+ADMINMAIL="iris-notify@irisns.com"
+MAIL="/usr/ucb/mail"                # also  /usr/bin/mail or /sbin/mail
+IRISETC="/usr/local/iris/etc"
+
+if [ -f "/usr/bin/gcc" ]; then
+  CC="gcc"
+elif [ -f "/usr/local/bin/gcc8" ]; then
+  CC="gcc8"
+elif [ -f "/usr/local/bin/gcc49" ]; then
+  CC="gcc49"
+elif [ -f "/usr/local/bin/gcc48" ]; then
+  CC="gcc48"
+elif [ -f "/usr/bin/cc" ]; then
+  CC="cc"
+else
+  echo "Can't find a compiler to use!"
+  exit 1
+fi
+
+CFLAGS="-O -DNOKEEPSTATE -fPIC -DIRIS_VPOLLER"         # can add -DDEBUG also
+LIBS=""             # -L/usr/local/lib -lbind
+YACC="yacc"
+
+# Try and detect the following automatically based on the OS
+OS_CFLAGS=""
+OS_LIBS=""
+RPCLIB=""
+
+PSFLAGS='axw'           # flags for ps to see all processes (-ef on SysV)
+
+RRDLIBDIR="/usr/local/lib"   # for librrd.a (RRD Tools)
+PERL="/bin/perl"
+AR="ar r"
+RANLIB="ranlib"
+INSTALL="install"
+PING="multiping"         # need a ping that can be run as:  ping -c 3 host
+
+# CURSESLIB can be curses or ncurses
+CURSESLIB='-lcurses -ltermcap -lmd'
+
+# Now list all the variables that we should store and substitute in
+# the makefiles...
+ALLVARS="package ROOTDIR SRCDIR MANDIR MANEXT OPSMAIL ADMINMAIL MAIL IRISETC"
+ALLVARS="${ALLVARS} CC CFLAGS YACC LIBS OS OS_CFLAGS OS_LIBS RPCLIB PSFLAGS"
+ALLVARS="${ALLVARS} PERL AR WHOAMI RANLIB INSTALL PING CURSESLIB"
+ALLVARS="${ALLVARS} RRDCFLAGS RRDLIBDIR RRDLIBS"
+
+ROOTDIR=/usr/local/snips
+MANDIR=${ROOTDIR}/man
+MANEXT="n"
+OPSMAIL="iris-notify@irisns.com"
+ADMINMAIL="iris-notify@irisns.com"
+MAIL="/usr/bin/mail"
+CFLAGS="-O -DNOKEEPSTATE -fPIC"
+LIBS=""
+RRDCFLAGS=""
+RRDLIBDIR="/usr/local/lib"
+RRDLIBS=""
+
+(mkdir TemP; cd TemP; ${YACC}) 2>&1 | egrep -i 'not.*found' >/dev/null 2>&1
+if [ $? = 0 ]; then 
+    echo "${YACC} NOT FOUND"
+    YACC="bison -y"
+    echo "Enter an alternative to yacc [${YACC}]: " | tr -d '\012'
+    read input ; if [ "X$input" != "X" ]; then  YACC="${input}" ; fi
+fi
+rm -rf TemP
+
+if [ ! -f ${PERL} ]; then  PERL=/usr/bin/perl ; fi
+if [ ! -f ${PERL} ]; then  PERL=/usr/local/bin/perl ; fi
+if [ ! -f ${PERL} ]; then
+    echo "Where is PERL located on your system? [$PERL]: "| tr -d '\012' 
+    read input ; if [ "X$input" != "X" ]; then  PERL="${input}" ; fi
+    if [ ! -f ${PERL} ]; then echo "WARNING, ${PERL} does not exist" ; fi
+fi
+
+##
+## Detect the operating system dependent parameters now
+##
+echo ""
+echo "Detecting operating system dependencies for ${OS}..."
+
+export PSFLAGS
+(/bin/ps $PSFLAGS) 2>&1 | egrep -i '^usage' >/dev/null 2>&1
+if [ $? = 0 ]; then PSFLAGS='-ef' ; fi
+
+LIBRESOLV="-lresolv"
+ls /usr/lib/libresolv* >/dev/null 2>&1
+if [ $? = 1 ]; then
+  ls /lib/libresolv* >/dev/null 2>&1
+  if [ $? = 1 ]; then
+    ls /usr/lib/libbind* >/dev/null 2>&1
+    if [ $? = 1 ]; then LIBRESOLV="" ; else LIBRESOLV="-lbind" ; fi
+  fi
+fi
+
+# mainly for Solaris systems. Should probably write a 'mywhoami' using 'id'
+WHOAMI="/usr/ucb/whoami"
+if [ ! -f ${WHOAMI} ]; then 
+    WHOAMI="/usr/bin/whoami"
+    if [ ! -f ${WHOAMI} ]; then WHOAMI="whoami" ; fi
+fi
+
+# These OS_CFLAGS and OS_LIBS are hardcoded in this script
+#
+case "$OS" in
+  FREEBSD|FreeBSD\ *)
+    OS_CFLAGS="-DFREEBSD -DIRIS_VPOLLER"
+    OS_LIBS="${LIBRESOLV} -lcrypt" # some hosts -lresolv not needed
+    PING=`which ping`     # can do ping -c cnt host
+  ;;
+  OPENBSD|OpenBSD\ 5*)
+    OS_CFLAGS="-DFREEBSD -DIRIS_VPOLLER"
+    OS_LIBS="${LIBRESOLV}"
+    PING="/sbin/ping"
+    CURSESLIB="-lcurses -ltermcap" # doens't have -lmd
+  ;;
+  LINUX12|Linux\ 1*)
+    OS_CFLAGS="-DLINUX1"
+    OS_LIBS="-ldbm"
+    CURSESLIB='-lncurses -ltermcap -lmd'
+    PING="/bin/ping"
+  ;; 
+  LINUX20|Linux\ 2*)
+    OS_CFLAGS="-DLINUX2";
+    OS_LIBS="${LIBRESOLV}"
+    if [ -f /usr/lib/libgdbm.so ]; then
+      OS_LIBS="${OS_LIBS} -lgdbm"
+    fi
+    CURSESLIB='-lncurses' # no termcap
+    PING="/bin/ping"     # can do ping -c cnt host
+  ;; 
+  LINUX31|Linux\ 3*)
+    OS_CFLAGS="-DLINUX2";
+    OS_LIBS="${LIBRESOLV}"
+    CURSESLIB='-lncurses' # no termcap
+    PING=`which ping`  
+  ;;
+  LINUX44|Linux\ 4*)
+    OS_CFLAGS="-DLINUX2";
+    OS_LIBS="${LIBRESOLV}"
+    CURSESLIB='-lncurses' # no termcap
+    PING=`which ping`  
+  ;;
+  *)
+     cat <<EoF
+     OS=$OS is not a supported or detected operating system. Try setting
+     the value of OS manually to the type of your system or set the
+     OS_CFLAGS and OS_LIBS value manually in the Makefile if compile fails.
+
+EoF
+  ;; 
+esac
+
+##
+echo "        OS_CFLAGS = ${OS_CFLAGS}"
+echo "        OS_LIBS   = ${OS_LIBS}"
+echo ""
+
+# Check for the correct INSTALL...
+>ChInstall
+(${INSTALL} -c -m 750 ChInstall /tmp/) >/dev/null 2>&1
+if [ ! -f /tmp/ChInstall ]; then INSTALL=${MYINSTALL} ; fi
+rm -f ChInstall /tmp/ChInstall
+
+##
+## Save all entered parameters
+##
+echo "Saving all values in $PREVDEFS..."
+rm -f $PREVDEFS
+>$PREVDEFS
+echo '# These answers are interdependent; do not edit this file!' >>$PREVDEFS
+if test ! -w $PREVDEFS
+then
+  echo "Seems like the $PREVDEFS file is not writable"
+else
+  (
+   for v in $ALLVARS
+   do
+     # even this horror botches metachars in var
+     # set | grep "^${v}="
+     eval "echo $v=\\\"\"\$$v\"\\\""
+   done
+  ) >>$PREVDEFS
+fi
+
+##
+## Edit the Makefiles for all the variables in $ALLVARS
+##
+echo "Editing various Makefiles..."
+rm -f $SEDFILE
+>$SEDFILE
+for v in $ALLVARS
+ do
+    (eval "echo \"s%\\\\($v[ 	]*=[ 	]*\\\\)@$v@%\\\\1\$$v%g\"") >> $TMPFILE
+    sed 's/\x01/\\1/g' $TMPFILE | uniq >> $SEDFILE
+ done
+
+for m in Makefile.mid */Makefile.mid */*/Makefile.mid
+ do
+   M=`echo $m | sed 's/\.mid$//'`
+   if [ -f $m ]; then
+     if [ -f $M ]; then mv -f $M ${M}.bak ; fi
+     cat Makefile.head $m Makefile.tail | sed -f $SEDFILE > $M
+   fi
+ done
+
+rm -f $SEDFILE
+rm -f $TMPFILE
+
+##
+cat <<Eof
+
+Done editing Makefiles.
+
+Type "make"  to start building  $PACKAGE
+
+Eof

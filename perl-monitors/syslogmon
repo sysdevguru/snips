@@ -1,0 +1,355 @@
+#!/usr/local/bin/perl -w
+
+# $Header: /home/cvsroot/snips/perl-monitors/syslogmon,v 1.0 2001/07/13 05:44:32 vikas Exp $
+#
+#	syslogmon - SNIPS perl monitor for syslogs
+#
+#	Copyright 1997. Netplex Technologies Inc.  vikas@navya.com
+#
+#
+# syslogmon reads various log files specified in the config file and
+# parses them for the regular expression specified in the config file.
+# Each regular expression has a matching 'variable' name (this can be
+# arbitrary). If the regular expression is matched, an event is put
+# in the Snips format datafile, with the variable name as specified
+# in the config file. The 'address' field of the EVENT structure is
+# set to the regular expression match. If the regular expression has
+# a '()', then the 'address' field is set to the pattern matching the
+# regexp within the '()' ($1 in PERL style regular expressions).
+#
+# To avoid too many messages being logged, if the variable name is
+# matches an already existing entry in the SNIPS data file, then the
+# entry is not-logged. After every 30 minutes, all old entries in
+# the data file are expired.
+#
+# The LOG files(/var/log/messages, /var/log/maillog etc.) have to be in a 
+# fixed format i.e. the first five fields have to be Month, Date, hh:mm:dd,
+# host, and logger name. Whatever after these five fields is searched to
+# match REGEXP(#4).
+#
+# Set the snips host as the main syslog host by putting the following
+# line in your /etc/syslog.conf file (or its equivalent):
+#	*.notice;kern.debug;lpr,auth.info;mail.crit	@snips.your.domain
+#
+###################
+# PROGRAM LOGIC : #
+###################
+#
+# 1) Reading the config file :
+# ============================
+#    #1        #2               #3              #4
+#    Diskerr   *	        warning		diskfull\s*(/var\S*)
+#
+#    - Read each line and break them into four fields.
+#    - create regexp[] array from the #4 field
+#    - initialize isdone array.  This array is used to prevent logging
+#      same type of event more than once.
+#
+# 2) Expiring Events :
+# ====================
+#    - Open syslogmon-output using two file-handles for reading and for writing
+#      (IEVENTS for reading and OEVENTS for writing).
+#    - Read event by event from IEVENTS
+#    - for each event read, if event timestamp is older than current time +
+#      expiretime then dont write the event back, else write to OEVENTS.
+#      Reset $isdone to zero
+#    - At end, truncate file to the length obtained from tell(OEVENTS).
+#
+# 3) Logging Events to syslogmon-output :
+# =======================================
+#    - Do Expire-Events
+#    - For each log file given in the config file get the file size
+#      - If the log file size is equal to the last saved offset then skip
+#        this file.
+#      - open the log file
+#      - else if the size has shrunk(probably the file was expunged) or
+#        the last saved offset is zero then
+#        - position the file pointer to the end of the file
+#      - else position the file pointer to the last saved offset.
+# 
+#      - retrieve each line from the log file and break them into 5 fields i.e.
+#        Month Date time     host     rest till "\n" .............
+#        Feb   11   17:43:15 freebird /kernel: diskfull  /var/tmp/junk
+#
+#      - go through the regexp[] array
+#        - if the regexp matches the last field i.e. rest and host match then
+#          - intiliaze and log the event to output file and snipslogd daemon.
+#          - set the isdone flag so that we dont log this event again till
+#            the expire time is over.
+#     NOTE THAT THIS PROGRAM ESCALATES EVENTS DIRECTLY TO THEIR LISTED
+#     SEVERITY AND DOES NOT STEP THROUGH THE VARIOUS LEVELS.
+#
+########################
+# Sample config line : #
+########################
+#
+# Var(#1)   Device(#2)	Severity(#3)	Reg Exp(#4)
+#####################################################
+# Probe	    *	        info		probing
+# Diskerr   *	        warning		diskfull\s*(/var\S*)
+#
+# When displaying EXP(#4) within parenthesis if any will be displayed
+# else the whole regular exp(#4) will be displayed.
+#
+# Snips event elements used:
+#   sender                     "syslogmon"
+#   severity                   "info", "error", "warning" or "critical"
+#   device
+#    name                      host
+#    addr                      contains regexp
+#   var                       
+#    name                      "Diskerr", "ParityError" etc from config file
+#    value                     1 means at Info level
+#    threshold                 as read from the config file
+#    units                     always "LogMesg"
+#
+## 
+##
+
+use strict;
+use vars qw ( $snipsroot $rcisco $debug
+	      $rprog $rpasswd $rcommand $varname $varunits $expiretime
+	      @items @logfiles %device %level %regexp %isdone %offset
+	    );
+
+BEGIN {
+  $snipsroot = "/usr/local/snips"  unless $snipsroot;	# SET_THIS
+  push (@INC, "$snipsroot/etc"); push (@INC, "$snipsroot/bin");
+  require "snipsperl.conf" ;		# local customizations
+}
+
+use SNIPS;
+
+############################
+## Variables customization #  overrides values in the snipslib.pl library
+############################
+$s_pollinterval=60;			# Seconds to sleep between tries.
+$varname = "UNINIT";
+$varunits = "LogMesg";
+$debug = 0;				# set to 1 for debugging output
+$expiretime = (30*60); # secs for which an entry remains in datafile
+############################
+
+##
+# Read the config file. Use '\t' as a separator for 'item'
+sub readconf {
+  my $lineno = 0;
+  my $startlogfiles = 0;
+
+  if ($debug == 0 && $libdebug > 0) {
+    $debug = $libdebug;
+    $libdebug = 1 if ($debug > 1) ;
+  }
+  $s_sender = 'syslogmon' if ($s_sender eq "");
+
+  undef @items;
+  open(CONFIG,"<$s_configfile")||die("Couldn't find $s_configfile, exiting");
+
+  while(<CONFIG>)
+  {
+    ++$lineno;
+    chomp;
+
+    if(/^\s*\#/) {next;}   # skip comments
+    if(/^\s*$/)  {next;}   # skip blank lines
+    if (/^\s*RRDTOOL\s+ON/i)  { $SNIPS::dorrd = 1; next; }
+    if (/^\s*RRDTOOL\s+OFF/i) { $SNIPS::dorrd = 0; next; }
+    if (/^(sleepinterval)\s+(\d+)\s*$/i || /^(pollinterval)\s+(\d+)\s*$/i) {
+      $s_pollinterval = $2;
+      next;
+    }
+    if ( !$startlogfiles && /^LOGFILES/ ) { 
+      $startlogfiles = 1; next ;  # all other lines are hostnames
+    }
+	
+    if ($startlogfiles) {
+      if ( /^\s*(\S+)\s*.*$/ ) { 
+	push (@logfiles, $1); 
+	$offset{$1} = 0;
+      }
+      else { print STDERR "Illegal log file line $_, skipping\n" ;}
+      next ;
+    }
+
+    # VAR HOST-regex SEVERITY REGEXP
+    if (/\s*(\S+)\s+(\S+)\s+(\S+)\s*(.*)\s*$/)
+    {
+      my $item = $1 ;	# the VAR name
+      # host regex.
+      my $hostregex = $2;
+      if ($2 eq '*' || $2 eq '+') { $hostregex = '.+'; } # Convert '*' => '.+'
+      $device{$item} = $hostregex;
+      $level{$item} = str2severity($3);  # level
+      $regexp{$item} = $4; # regexp for searching log lines
+      $isdone{$item} = 0;  # init to zero
+      push(@items,$item);
+      next;
+    }
+    print STDERR "[$lineno] Ignoring illegal line: $_\n";
+
+  }	# end while(CONFIG)
+  close(CONFIG);
+
+  if(0>$#items){die("Nothing to monitor in $s_configfile, exiting")};
+  if ($debug) {
+    print "Items are:\n"; foreach (@items) { print "\t$_\n" } ;
+    print "Logfiles :\n"; foreach (@logfiles) { print "\t$_\n"};
+  }
+}	# end: readconf()
+
+
+## do_poll()
+#
+# Calls validate_datafile() to expire old events, logs new events to
+# SNIPS datafile.
+#
+# Sample log message :
+#
+# $1  $2 <--$3--> <--$4--> <------------- $5 -------------------------->
+##########################################################################
+# Feb 11 17:40:22 freebird /kernel: probing for devices on the PCI bus:
+# Feb 11 17:43:15 freebird /kernel: real memory  = 33554432 (32768K bytes)
+# Feb 11 17:43:15 freebird /kernel: diskfull  /var/tmp/junk
+#
+sub do_poll {
+  my $event = new_event();
+
+  alter_event($event, $s_sender, undef, undef, undef, undef, $varunits);
+  # expire old data in SNIPS data file
+  &expire_datafile_events();
+
+  # open the output data file for appending
+  my $datafd = open_datafile($s_datafile, "a");
+    
+  foreach my $logfile (@logfiles) # for all log files given in config file
+  {
+    if (! -r $logfile) {
+      print STDERR "cannot open logfile $logfile- $!\n";
+      next;
+    }
+      
+    my $size = (-s "$logfile"); # returns file size
+    $debug && print "Opening log file : $logfile,  Size : $size\n";
+
+    # if log file size same then dont read log file.  If log file size
+    # is < $offset{$logfile} that means the log file was probably expunged
+    if ($size == $offset{$logfile}) { next;	}
+    elsif ($size < $offset{$logfile} || $offset{$logfile} == 0) {
+      $offset{$logfile} = $size;  # point to EOF
+    }
+    # open the log file for reading
+    if (! open(LOGFILE, "< $logfile")) {
+      print STDERR "Cannot open $logfile $!\n"; next;
+    }
+    # move the file pointer to last read + 1 or EOF
+    if (! seek(LOGFILE, $offset{$logfile}, 0)) {
+      print "Cannot open $logfile $!\n"; next;
+    }
+
+    while(<LOGFILE>) # read a single line
+    {
+      my $line = $_;
+      (/\s*(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.*)\s*$/);
+      my ($Month, $Date, $time, $host, $rest) = ($1, $2, $3, $4, $5);
+	    
+      # check if read data matches any of the  regexp
+      foreach my $var (@items)	# the VAR name
+      {
+	my $device = $device{$var};
+	my $regexp = $regexp{$var};
+	#sleep(1);
+	if ($host =~ m!$device!i && $rest =~ m!$regexp!i)
+	{			# if host and reg exp match
+	  # $1 is taken from the parsed reg exp
+	  if ($1) {$regexp = $1;}
+
+	  # if this event type already logged then skip
+	  if ($isdone{$var} == 1) {
+	    print "(dotest)Event already logged, \'$var\'\n" if ($debug > 2);
+	    last;		# skip foreach ($var), read next line
+	  }
+	  
+	  $isdone{$var} = 1;		# set the flag
+	  # $debug && print "Logging Line : $line, Item : $var\n";
+	  
+	  # init event and fill values. The parsed 'regexp' is the
+	  # address field.
+	  alter_event($event, undef, $host, $regexp, undef, $var, undef);
+	  my %event = unpack_event($event);
+
+	  # The event gets written directly at the level instead
+	  # of escalating gradually like typical snips monitors
+	  $event{severity} = $event{loglevel} = $level{$var};
+	  $event{state} = $n_DOWN;
+	  my $ev = pack_event(%event);
+	  write_event($datafd, $ev);
+	  SNIPS::eventlog($ev);
+	  last;
+	}		# if (host and regexp match)
+      }		# foreach (@items)
+    }	# while(<LOGFILE>)
+    
+    $offset{$logfile} = tell(LOGFILE); # for next time
+    close(LOGFILE);
+  }		# foreach (@logfiles)
+
+  close_datafile($datafd);
+
+}	# dopoll()
+
+
+## expire_datafile_events
+#
+# Checks if the events in the datafile are older than $expiretime.
+# If so, delete them from the datafile (this is to prevent old events
+# from sitting around in the SNIPS datafile forever).
+# 
+sub expire_datafile_events {
+
+  my ($event);
+
+  if (! -e "$s_datafile") {return;} # if no file then return
+
+  # for reading the SNIPS datafile
+  my $fd_in = open_datafile($s_datafile, "r");
+  # dont overwrite the SNIPS datafile
+  my $fd_out = open_datafile($s_datafile, "r+");
+
+  if (not defined $fd_in || not defined $fd_out) {
+    print STDERR "Error opening $s_datafile\n"; next;
+  }
+
+  my ($curtime) = time;
+
+  # read each event structure from the SNIPS datafile
+  while ( ($event = read_event($fd_in)) )
+  {
+    my %event = unpack_event($event);
+    my $item = $event{var_name};
+
+    # if event expired then dont write it back.
+    if ($curtime > ($event{eventtime} + $expiretime)) {
+      $isdone{$item} = 0;		# reset
+      if ($debug > 2) {
+	print STDERR "(expire_ev) Expiring Variable: \'$item\'\n";
+      }
+      next;
+    }
+    write_event($fd_out, $event);	# dont use rewrite
+  }	# while read_event()
+  close_datafile($fd_in);
+  # $fd_out is pointing at last written event.
+  open(FDOUT, ">&=$fd_out");	# get perl style file handle from file desc
+  truncate(FDOUT, tell(FDOUT)); # truncate file at current location
+  close(FDOUT);
+  close_datafile($fd_out);
+
+} # end of function expire_datafile_events()
+
+
+###
+### main
+###
+
+snips_main(\&readconf, \&do_poll, undef);
+

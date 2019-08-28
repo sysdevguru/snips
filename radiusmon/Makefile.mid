@@ -1,0 +1,33 @@
+# $Id: Makefile.mid,v 1.0 2001/07/08 22:51:22 vikas Exp $
+#
+# Makefile for 'radiusmon'
+#
+
+# Might need to link with 'libresolv' on some systems
+
+PROGCDEFS =
+PROGLIBS  =	# -lresolv
+
+TARG =	radiusmon
+OBJS =	main.o radiusmon.o md5.o
+INITFILES = radiusmon
+
+$(TARG): $(OBJS) Makefile
+	$(CC) $(CFLAGS) $(OBJS) $(LIBS) $(PROGLIBS) -o $@
+
+
+install: installdir $(TARG)
+	$(INSTALL) $(INSTALLFLAGS) -c -m 751 $(TARG) $(BINDIR)/
+
+test:	radiusmon.c md5.c
+	$(CC) -c $(CFLAGS) -DDEBUG -DTEST radiusmon.c
+	$(CC) $(CFLAGS) radiusmon.o md5.c $(LIBS) $(PROGLIBS) -o $@
+
+clean:
+	rm -f $(DIRT) test
+
+rcs:
+	@echo "Doing 'rcs' in `pwd`"
+	@-for i in $(OBJS); do \
+		$(CO) -q `basename $$i .o`.c ;\
+	  done

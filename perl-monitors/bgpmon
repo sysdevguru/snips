@@ -1,0 +1,416 @@
+#!/usr/local/bin/perl
+#
+# $Header: /home/cvsroot/snips/perl-monitors/bgpmon,v 1.1 2001/07/14 22:56:09 vikas Exp $
+#
+#        bgpmon - perl monitor for BGP processes
+#
+#   logs into a router and grabs/parses a bgp summary, then displays
+# all down peers.  compatible with most routers based on logic given in
+# bgpmon-confg.  sample configuration includes CISCO and ASCEND_GRF object
+# definitions.
+#
+# Author: Jonathan A. Zdziarski, jonz@netrail.net
+#
+#       Copyright 1998 Jonathan A. Zdziarski, jonz@netrail.net
+#
+# This software is distributed as part of the SNIPS package.
+#
+# FEATURES:
+#        - works with ascend, bay and cisco routers
+#        - ability to add your own router logic for different kinds of routers
+#        - ability to have different passwords for each router
+#        - line-by-line peer configuration, or...
+#        - one-step router configuration (supply the router, and bgpmon will
+#          grab all the peers off of it, name them, and enter them
+#          as individual events in snips)
+#        - router-down assumption (peers are down/unchanged if a router is
+#          unreachable)
+#        - one-step router updating (if a router was down when bgpmon started,
+#          it will attempt to reach the router later and add peers)
+#        - different severity settings defined by as number
+#
+# CONFIGURATION:
+#
+#        - If you specify ASNUM:NAME as the name of a single peer,
+#          ASNUM will define the as number of that peer, rather than a bgp
+#          summary.  This is useful to retain proper severity levels in the
+#          event that bgpmon is never able to assertain the as number from
+#          a bgp summary (e.g. the router is down when bgpmon is started)
+#        - Did a sprintf("%6d", ASN) on all ASN's (internally) to prevent
+#          router/config differences
+#
+#
+# STRUCTURES USED:
+#       @peers  = peer \t rtr \t peerip
+#       @routers = rtr
+#       $router{$name} = type addr passwrd user
+#       $object{$type} = port \t commands
+#       $comp{$type} = array \t up \t down
+#	$severity{$as} = $E_CRITICAL - $E_INFO
+#
+#####
+require 5.000;
+
+use strict;
+use vars qw ( $snipsroot $debug $varunits
+	      @peers @routers
+	      %object %comp %router %severity %peerstatus %ascache %hostcache
+	      $ASSUME $UPDATEINTERVAL $updatetime
+	    );
+
+BEGIN {
+  $snipsroot = "/usr/local/snips"  unless $snipsroot;	# SET_THIS
+  push (@INC, "$snipsroot/etc"); push (@INC, "$snipsroot/bin");
+  require "snipsperl.conf" ;		# local customizations
+}
+
+use SNIPS;
+
+# bgpmon variables
+$s_pollinterval=60*5;			# 5 minute polling interval
+$UPDATEINTERVAL=60*120;			# Update router peers ever 2 hours
+$severity{'DEFAULT'} = $E_ERROR;	# Default severity
+$ASSUME = 0;			# Assume all peers down if router unreachable?
+$debug = 0;
+
+# SNIPS variables
+$varunits = "State";
+
+$|=1; # unbuffered stdout 
+
+# subroutine: readconf
+#    purpose: reads in the master configuration/parses
+#             call this only after snips_startup
+sub readconf {
+  my $lineno = 0;
+
+  if ($debug == 0 && $libdebug > 0) {
+    $debug = $libdebug;
+    $libdebug = 1 if ($debug > 1) ;
+  }
+  $s_sender = 'bgpmon' if ($s_sender eq "");
+
+  undef @peers; undef @routers;
+  open(CONFIG,"<$s_configfile")||die("Couldn't find $s_configfile, exiting");
+  my $datafd = open_datafile($s_datafile, "w");
+  # alter_event($event, $s_sender, undef, undef, undef, $varname, $varunits);
+
+  while(<CONFIG>) {
+    ++$lineno;
+    chomp;
+    s/\t+/ /g; # replace tabs with spaces
+    s/^\s*(.*?)\s*$/$1/; # trim whitespace
+    next if (/^\#/);
+    next if (/^$/);
+    if (/^\s*RRDTOOL\s+ON/i)  { $SNIPS::dorrd = 1; next; }
+    if (/^\s*RRDTOOL\s+OFF/i) { $SNIPS::dorrd = 0; next; }
+    if (/^(sleepinterval)\s+(\d+)\s*$/i || /^(pollinterval)\s+(\d+)\s*$/i) {
+      $s_pollinterval = $2;
+      next;
+    }
+
+    my($keyword, $parms) = split(/\s+/, $_, 2); 
+
+    if ($keyword =~ /^OBJECT$/i) {  # commands to get/parse bgp summary 
+      my($type, $port, $array, $up, $commands) = split(/\s+/, $parms, 5);
+      $object{$type} = "$port\t$commands";
+      $comp{$type} = "$array\t$up";
+      $debug && print "$0: new object ($type) = $port, $commands\n";
+    }
+    elsif ($keyword =~ /^ROUTER_DEF$/i) {  # router name, type, addr, pass
+      my($name, $type, $address, $pass, $user) = split(/\s+/, $parms);
+      $user = "" if (! $user);	# username is optional
+      $router{$name} = "$type\t$address\t$pass\t$user";
+      $debug && print "$0: new router ($name) is a $type ($address)\n";
+
+    }
+    elsif ($keyword =~ /^ROUTER$/i) {  # monitor all peers on this router
+      push(@routers, join("\t", split(/\s+/, $parms)));
+    }
+    elsif ($keyword =~ /^SEVERITY$/i) {  # set severity level for this as
+      my($as, $severity) = split(/\s+/, $parms);
+      if ($as !~ /^DEFAULT/ && $as>0) {
+	$as=sprintf("%6d", $as); $as =~ s/ /0/g;
+      }
+      $debug && print "$0: added severity for as$as - $severity\n";
+      $severity{$as}=str2severity($severity);
+    }
+    elsif ($keyword =~ /^PEER$/i) {  # monitor this peer on the router
+      my($router, $peername, $peerip) = split(/\s+/, $parms);
+      push(@peers, "$peername\t$router\t$peerip");
+    }
+    elsif ($keyword =~ /^ASSUME$/i) {  # down or prev status if unreachable
+      my($stat) = split(/\s+/, $parms);
+      if ($stat =~ /^unchanged$/i) { $ASSUME = 1; }
+      elsif ($stat =~ /^down$/i)  { $ASSUME = 0; }
+      else { die "$0: unknown status: $stat\n"; }
+    }
+    else { print STDERR "$0: unknown keyword: $keyword (skipping)\n"; next; }
+  }
+  close(CONFIG);
+  die "$0: nothing to monitor in $s_configfile; exiting.\n" 
+    if ((0>$#peers) && (0>$#routers));
+
+  ## NOW INIT THE PEER LIST
+  &initializepeers;	# init all single peers
+  &updatepeers;		# grab all peers from routers specified
+}
+
+## Log into all the routers in @router, and retrieve the BGP status
+#  (up or down) for each peer we are to monitor.
+#
+sub get_bgp_status {
+
+  $updatetime = time unless ($updatetime);
+  foreach my $router (keys(%router))
+  {
+    my($router_type, $router_ip, $router_pass, $router_user) = 
+      split(/\t/, $router{$router});
+    my($router_port, $router_cmds) = split(/\t/, $object{$router_type});
+    die "$0: no object definition '$router_type'\n" 
+      unless ($object{$router_type});
+    die "$0: no comprehension for '$router_type'\n" 
+      unless ($comp{$router_type} ne "");
+
+    $router_cmds =~ s/\%PASS(WORD)?\%/$router_pass/gi;
+    $router_cmds =~ s/\%USER(NAME)?\%/$router_user/gi;
+    my (@BUFFER) = &getbgpsumm($router_ip, $router_port, 
+      split(/\:/, $router_cmds));
+
+    # if we get an error (host unreachable, etc), set all peers on that
+    # router down if the assumption is to do so
+    if ($BUFFER[0] eq "*ERROR*")
+    {
+      print STDERR "$0: $router_ip: $BUFFER[1]\n";
+      next if ($ASSUME == 1);	# next router
+      foreach my $peer (@peers)
+      {
+        my($peer_name, $peer_router, $peer_ip) = split(/\t/, $peer);
+        next unless ($peer_router eq $router);
+	$peerstatus{"$peer_router\t$peer_ip"} = 0;	# mark down
+        $debug && print "$0: get_bgp_status() $peer_router:$peer_ip = 0\n";
+      }  # foreach
+    }  # if $BUFFER
+
+    foreach my $peer (@peers) {
+      my($peer_name, $peer_router, $peer_ip) = split(/\t/, $peer);
+      next unless ($peer_router eq $router);
+
+      my($arrayref, $up) = split(/\t/, $comp{$router_type});
+      my($num_status, $num_ip, $num_as) = split(/\,/, $arrayref);
+
+      foreach my $buffer (@BUFFER) {
+        chomp $buffer;
+        $buffer =~ s/^\s+//g;	# remove all starting spaces
+        $buffer =~ s/\t+/ /g;
+        $buffer =~ s/\s+/ /g;
+        my(@fields) = split(/ /, $buffer);
+        my($status) = $fields[$num_status];
+        my($ipref) = $fields[$num_ip];
+        my($asref) = sprintf("%6d", $fields[$num_as]);  # messy formatting
+        $asref =~ s/ /0/g;
+        $ascache{$ipref} = $asref;
+        if ($ipref =~ /(\d+\.\d+\.\d+\.\d+)/) { $ipref = $1; } else { next; }
+        $debug && print "$0: status of $ipref: $status (AS $asref)\n";
+        $peerstatus{"$peer_router\t$ipref"} = 0;
+        foreach(split(/\,/, $up)) {
+	  if ($status =~ /^$_$/i) {$peerstatus{"$peer_router\t$ipref"} = 1;}
+	}
+        print "$0: get_bgp_status() $peer_router:$peer_ip = ",
+	  $peerstatus{"$peer_router\t$ipref"}, "\n" if $debug;
+
+      } # foreach $buffer (@BUFFER)
+    }   # foreach $peer (@peers)
+  }     # foreach $router (keys %router)
+
+  if ($UPDATEINTERVAL <  (time - $updatetime) ) { 
+    &updatepeers;
+    $updatetime = time;
+  }
+
+} # get_bgp_status()
+
+
+# subroutine: getbgpsumm
+#    purpose: retrieves a bgp summary from a router
+#     syntax: &getbgpsumm [hostname] [port] [commands]
+#
+# NOTE: make sure the commands end with an 'exit' command to close the socket
+
+sub getbgpsumm {
+  my ($host, $port, @COMMANDS) = @_;
+  my (@buffer, $remote_addr);
+
+  use Socket;
+
+  $debug && print "$0: connecting to $host:$port\n";
+
+  socket(SOCK, PF_INET, SOCK_STREAM, getprotobyname('tcp')) ||
+    return ("*ERROR*", "socket() $!");
+  if ($host =~ /^\d+/) { $remote_addr = inet_aton($host); } # IP addr
+  else { $remote_addr = gethostbyname($host); }  # name
+  return ("*ERROR*", "Unknown host $host") if (! $remote_addr);
+  my $paddr = sockaddr_in($port, $remote_addr);  # packed address
+  if (! connect(SOCK, $paddr)) {
+    close SOCK; return ("*ERROR*", "socket() $!");
+  }
+
+  select(SOCK); $| = 1; select(STDOUT);
+  foreach(@COMMANDS) { $debug && print "$0: sending command: $_\n";
+                       print SOCK "$_\r\n"; sleep 2; }
+  while(<SOCK>) {  push(@buffer, $_); }
+  $debug && print "$0: socket closed, $#buffer lines captured.\n";
+  close(SOCK);
+
+  @buffer;
+}       # sub getbgpsumm()
+
+# subroutine: updatepeers
+#    purpose: runs through all router objects, and grabs/adds peers to
+#             the individual peer list.  this is run every so
+#             often within the program, incase a router was down when
+#             bgpmon was started, so that it is added when it goes up.
+sub updatepeers {
+  my $event = new_event();
+  my $router;
+  my $datafd = open_datafile($s_datafile, "a");	# append mode
+
+  foreach $router (@routers) {
+    my($name) = split(/\t/, $router);
+    my($object, $ip, $pass, $user) = split(/\t/, $router{$name});
+    my($buffer);
+    die "$0: unknown router definition: $name\n" unless ($router{$name} ne "");
+    die "$0: unknown object: $object\n" unless ($object{$object} ne "");
+    die "$0: no comprehension for $object\n" unless ($comp{$object} ne "");
+    my($PORT, $COMMAND) = split(/\t/, $object{$object});
+    $COMMAND =~ s/\%PASS(WORD)?\%/$pass/gi;
+    $COMMAND =~ s/\%USER(NAME)?\%/$user/gi;
+    my(@COMMANDS) = split(/\:/, $COMMAND);
+    my(@BUFFER) = &getbgpsumm($ip, $PORT, @COMMANDS);
+    if ($BUFFER[0] eq "*ERROR*") {
+      print STDERR "$0: $ip: $BUFFER[1]\n";
+      next;
+    }
+    my($arrayref, $up) = split(/\t/, $comp{$object});
+    my($num_status, $num_ip, $num_as) = split(/\,/, $arrayref);
+    my ($status, $ipref, $asref);
+    foreach $buffer (@BUFFER) {
+      chomp $buffer;
+      $buffer =~ s/^\s+//g;
+      $buffer =~ s/\t+/ /g;
+      $buffer =~ s/\s+/ /g;
+      my(@fields) = split(/ /, $buffer);
+      $status = $fields[$num_status];
+      $ipref = $fields[$num_ip];
+      $asref = sprintf("%6d", $fields[$num_as]);
+      $asref =~ s/ /0/g;
+      if ($ipref =~ /(\d+\.\d+\.\d+\.\d+)/) { $ipref = $1; } else { next; }
+      $ascache{$ipref} = $asref;
+      my($exists) = 0;
+      foreach my $existing_peer (@peers) {
+        my($existing_name, $existing_routername, $existing_peerip) = 
+          split(/\t/, $existing_peer);
+        if (($existing_routername eq $name) && ($existing_peerip eq $ipref)              && ($existing_routername ne "") && ($existing_peerip ne "")) {
+          $exists = 1;
+          $debug && print "$0: peer already exists: $existing_routername:" .
+                          "$existing_peerip\n";
+        }
+      } # foreach $existing_peer 
+      if ($exists != 1) {
+        push(@peers, "-\t$name\t$ipref"); 
+        $debug && print "$0: adding $ipref/$name to peers list\n";
+        my($peerhostname);
+        if ($hostcache{$ipref}) { $peerhostname = $hostcache{$ipref}; }
+	else {
+          $peerhostname = gethostbyaddr(pack('C4', split(/\./, $ipref)), 2);
+          if ($peerhostname ne "") {
+            my(@fields)=split(/\./, $peerhostname); pop(@fields); pop(@fields);
+            $peerhostname=join(".", @fields);
+          }
+          else { $peerhostname = $ipref; }
+          $hostcache{$ipref}=$peerhostname;	# save in cache
+        }
+
+        $debug &&
+	  print "$0: initializing: $name:$ipref ($asref) $peerhostname\n";
+        $asref =~ s/^0+//;
+	alter_event($event, $s_sender, "$asref:$peerhostname", $ipref,
+		    undef, "BGP-$name", $varunits);
+	write_event($datafd, $event);
+      } # if ($exists)
+    }   # foreach $buffer (@BUFFERS)
+  }     # foreach $name (@routers)
+
+  close_datafile($datafd);
+
+}       # sub updatepeers()
+
+
+# subroutine: initializepeers
+#    purpose: initializes all peers defined in config
+sub initializepeers {
+  my ($peer, $peerhostname);
+  my $event = new_event();
+  my $datafd = open_datafile($s_datafile, "w");	# new file
+
+  foreach $peer (@peers) {
+    my $asref = 0;
+    my($peer_name, $rname, $peer_ip) = split(/\t/, $peer);
+    die "$0: unknown router definition: $rname\n" unless ($router{$rname} ne "");
+    $debug && print "$0 initializepeers(): $peer_name, $rname, $peer_ip\n";
+    
+    if (($peer_name =~ /^\d+\:/) && ($ascache{$peer_ip} eq "")) {
+      my ($x) = (split(/\:/, $peer_name))[0];
+      $asref = sprintf("%6d", $x);
+      $asref =~ s/ /0/g;
+      $ascache{$peer_ip} = $asref;
+      $debug && print "$0: setting as$asref\n";
+    } 
+
+    if ($hostcache{$peer_ip}) { $peerhostname = $hostcache{$peer_ip}; }
+    else {
+      $peerhostname = gethostbyaddr(pack('C4', split(/\./, $peer_ip)), 2);
+      if ($peerhostname) {
+        my(@fields)=split(/\./, $peerhostname); pop(@fields); pop(@fields);
+        $peerhostname=join(".", @fields);
+      }
+      else { $peerhostname = $peer_ip; }
+      $hostcache{$peer_ip}=$peerhostname;
+    }
+    $peerhostname = $peer_name if ($peer_name ne "-");
+
+    $debug && print "$0: initializing: $peerhostname ($rname:$peer_ip)\n";
+    $peerhostname = "$asref:$peerhostname" if ($asref);
+    alter_event($event, $s_sender, $peerhostname, $peer_ip, undef,
+		"BGP-$rname", $varunits);
+    write_event($datafd, $event);
+  }     # foreach $peer
+
+  close_datafile($datafd);
+}       # sub initializepeers()
+
+## Called by snips generic 'poll' for each event read from the datafile.
+#  This order matches the sequence of peers in @peers
+sub dotest {
+  my ($event, $i) = @_;
+  &get_bgp_status()  if ($i == 1);
+
+  my $peer = $peers[$i - 1];	# index starts from 0, not 1
+  my ($peer_name, $peer_router, $peer_ip) = split(/\t/, $peer);
+  my $status = $peerstatus{"$peer_router\t$peer_ip"};
+  $status = 0 if (! defined($status));
+  my $asref = $ascache{$peer_ip};
+  my $severity = $severity{'DEFAULT'};
+  $severity = $severity{$asref}  if ($asref && $severity{$asref});
+  # status, value, thres, maxseverity
+  return ($status, $status, 0, $severity) ;
+
+}
+
+
+###
+### Main program:
+###
+
+&snips_main(\&readconf, undef, \&dotest);
+

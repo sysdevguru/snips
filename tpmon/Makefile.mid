@@ -1,0 +1,32 @@
+# $Id: Makefile.mid,v 1.0 2001/07/09 03:56:28 vikas Exp $
+#
+# Makefile for 'tpmon' (thruput monitor)
+#
+
+TARG =	tpmon
+OBJS = 	main.o tpmon.o
+INITFILES = tpmon
+
+PROGCDEFS =
+PROGLIBS  =
+
+$(TARG): $(OBJS) Makefile
+	$(CC) $(CFLAGS) $(OBJS) $(LIBS) -o $@
+
+######
+# small testing program to demonstrate the throughput() function
+###
+test tptest:	tptest.o tpmon.o tptest.h
+	$(CC) $(CFLAGS) -o tptest tpmon.o tptest.o
+
+install: installdir $(TARG)
+	$(INSTALL) $(INSTALLFLAGS) -c -m 751 $(TARG) $(BINDIR)/
+
+clean:
+	rm -f $(DIRT) tptest
+
+rcs:
+	@echo "Doing 'rcs' in $(TARG)"
+	@-for i in $(OBJS); do \
+		$(CO) -q `basename $$i .o`.c ;\
+	  done

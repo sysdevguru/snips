@@ -1,0 +1,13 @@
+# novellmon configuration to monitor Novell SERVERS
+#
+#
+#  A Cisco router from which to steal the info:
+#
+ROUTER  = mycisco  mypassword
+#
+# Server	Type
+#
+ABC	4
+DEF	4
+ABC	47
+XYZ	47

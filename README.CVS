@@ -1,0 +1,5 @@
+To access the CVS tree (read only):
+
+	csh%  setenv CVSROOT  ":pserver:public@cvs.navya.com:/cvsroot"
+	csh%  cvs co snips
+

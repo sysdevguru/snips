@@ -1,0 +1,75 @@
+.\"$Header: /home/cvsroot/snips/man/nsmon.8,v 1.0 2001/07/08 22:31:48 vikas Exp $"
+.\"
+.TH NSMON 8 "June 2001"
+.SH NAME
+nsmon \- Nameserver monitor
+.SH SYNOPSIS
+.B nsmon
+[
+.B \-a
+] [
+.B \-d
+] [
+.B \-o
+.I output-file
+] [
+.I config-file
+] [
+.B \-x
+]
+.SH DESCRIPTION
+.LP
+.B nsmon
+is part of the SNIPS network monitoring package, used for
+testing the nameserver status 
+.RI ( named
+) for a list of nameservers.
+.PP
+The program sends SOA type queries for the domain name listed in the config
+file. Each DOMAINNAME keyword starts a new set of hosts to query for the
+listed domain.
+A response type of authoritative can also be specified using the AUTH
+keyword (to set the RES_AAONLY resolver option).
+.PP
+Other resolver options set in the query are RES_RECURSE off (no recursion),
+RES_DNSRCH off (parent, etc not searched).
+Note however, that the DNS server may choose to ignore any of these options. 
+.PP
+The servers are queried every POLLINTERVAL (default 60) seconds.
+.PP
+.\"
+.SH OPTIONS
+.TP 20
+.B \-a
+autoreload the configuration file if it is updated since last reload and if
+it is at least 1 minute old.
+.TP
+.B \-d
+selects verbose debugging output mode. Specify multiple times to increase the
+debug level.
+.TP
+.BI "\-o" " output file"
+Name of the file to which to write the output.  This file is 
+.I not
+in human-readable format, and is intended to be processed by the 
+.BR snipstv (1)
+display program.
+.TP
+.B \-x
+extension that is added to the program name to create the config file name
+and output file name.
+.TP
+.I config-file
+This file lists the hosts to be queried for the nameserver. A sample config
+file is provided with the software.
+.\"------------------------------------
+.SH CAVEATS
+The program uses the
+.I res_mkquery()
+system call for querying the nameserver.
+Unfortunately, discrepancies in the data structures exist between vendors, so
+slight modifications to the source might be necessary on some systems.
+.PP
+The nameserver queried can choose to ignore the various flags (like
+NORECURSIVE, AAONLY) that the client sets in the query.
+

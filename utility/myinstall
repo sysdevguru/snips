@@ -1,0 +1,73 @@
+#!/bin/sh
+
+## Alternate for the old 'install' program which could understand the
+#  syntax-  'install -c -m <mode> file file file dest
+#
+#	-vikas@navya.com
+#
+
+MODE=755
+
+while [ ! "X$1" = "X" ]
+do
+  case $1 in
+    -m)  shift ; MODE=$1 ; shift ;;
+    -c)  COPY=yes ; shift;;
+    *)   break;;
+  esac
+done
+
+
+###
+###
+if [ $# -eq 0 ]; then
+  echo "Nothing to install"
+  echo 'usage: myinstall [-c] [-m mode] files  dest'
+  exit 1
+elif [ $# -eq 1 ]; then
+  echo "Missing destination directory"
+  exit 1
+fi
+
+# append all files to FILES except last argument which is destination
+while [ $# -gt 1 ]
+do
+  FILES="$FILES $1"
+  shift
+done
+
+DEST=$1
+
+#echo "myinstall:  Installing $FILES  to  $DEST (mode $MODE)"
+
+if [ -d "$DEST" ]; then
+  for F in $FILES ; do
+    if [ -f $F ]; then
+      rm -f $DEST/`basename $F`
+      cp $F $DEST
+      chmod $MODE $DEST/`basename $F`
+      if [ "X$COPY" = "X" ]; then
+	rm -f $F
+      fi
+    else
+      echo "$F does not exist"
+    fi
+  done
+else
+  if [ -f $DEST ]; then
+    rm -f $DEST
+  fi
+  for F in $FILES ; do
+    if [ -f $F ]; then
+      cp  $FILES   $DEST
+      chmod $MODE  $DEST
+      if [ "X$COPY" = "X" ]; then
+	rm -f $F
+      fi
+    else
+      echo "$F does not exist"
+    fi
+  done
+fi
+
+exit 0

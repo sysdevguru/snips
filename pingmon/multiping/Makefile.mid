@@ -1,0 +1,27 @@
+# $Id: Makefile.mid,v 1.0 2001/07/08 23:06:49 vikas Exp $
+#
+# Makefile for multiping
+#
+# 
+
+PROGCDEFS =
+PROGLIBS  = $(OS_LIBS) -lm
+
+TARG =	multiping
+OBJS = 	multiping.o multiping6.o
+
+$(TARG):	$(OBJS) Makefile
+	$(CC) $(CFLAGS) $(OBJS) $(PROGLIBS) -o $(TARG)
+
+install:  installdir  $(TARG)
+	$(INSTALL) -o root -g wheel -c -m 4711 $(TARG) $(BINDIR)/
+	@if [ `whoami` = "root" ]; then \
+		chown root $(BINDIR)/$(TARG) ;\
+		ls -lg $(BINDIR)/$(TARG) ;\
+	 else \
+		echo "";echo "___Installed $(TARG) needs to be root suid___" ;\
+		echo "Do as root manually" ;\
+	 fi
+
+clean:
+	rm -f $(DIRT)

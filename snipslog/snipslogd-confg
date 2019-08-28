@@ -1,0 +1,31 @@
+## $Id: snipslogd-confg,v 1.1 2001/08/07 13:07:36 vikas Exp $
+##
+## Config file for snips logging daemon (snipslogd)
+##
+
+# The following hosts are permitted to log entries to this daemon:
+# (NOTE: no hostnames, only IP addresses)
+permithosts	127.0.0.1  128.121.50.2 128.121.50.7
+permithosts	128.121.50.141 128.121.50.143
+
+##
+## Give full pathnames in filenames since the daemon changes dir.
+##
+## SENDER	LEVEL		LOGFILE or PIPEFILE
+##
+*		critical	/usr/local/snips/logs/critical
+*		error		/usr/local/snips/logs/error
+*		warning		/usr/local/snips/logs/warning
+*		info		/usr/local/snips/logs/info
+##
+trapmon		info		/usr/local/snips/logs/traps.info
+
+#
+# In piped commands, a ^ is replaced with a space.
+ippingmon	critical	|/usr/local/snips/etc/beep_oncall
+ippingmon	error		|/usr/local/snips/etc/beep_oncall^peter
+
+## Call notifier.pl when device goes into critical and also out of critical.
+#  Note the '-' argument to denote stdin for notifier.pl
+ippingmon	critical	|/usr/local/snips/bin/notifier.pl^-
+

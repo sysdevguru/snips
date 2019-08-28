@@ -1,0 +1,994 @@
+#!/usr/local/bin/tixwish
+
+# $Header: /home/cvsroot/snips/tksnips/tkSnips.tix,v 1.0 2001/07/09 03:50:20 vikas Exp $
+# --------------------------------------------------------------------------
+# You need 'tixwish' to run this program (comes with Tcl/Tk)
+#
+# tkSnips: An X-Windows based client for SNIPS. YOU NEED TO RUN
+# 'ndaemon' on the snips monitoring host since this program connects to
+# ndaemon.
+#
+# Syntax: tkSnips [options] [ndaemon-hostname]
+#         See the print_usage procedure below for details.
+#
+# This also works under Windows 95/NT, and, presumably, on the Macintosh.
+# Give the file a .TIX extension and set Tix as the default program for
+# executing files of this type.
+#
+# The program is self-documenting; see the selections under the File
+# menu for more details.
+#
+# Revision history:
+#   1.0 (12/31/97)	Initial version by Lydia Leong (lwl@godlike.com)
+#   1.1 (1/22/98)	Tix version created (lwl)
+#   1.2 (2/9/98)	Fixed a small bug in filtering (lwl)
+#   1.3 (3/12/98)	Fixed a font issue, sort of, on Win 95/NT (lwl)
+#   1.4 (3/18/98)	Fixed the font issue for real (lwl)
+#   1.5 (7/10/99)	Tweaks for public consumption (lwl)
+#
+# --------------------------------------------------------------------------
+
+set my_admin "Lydia Leong (lwl@godlike.com)"
+
+set my_version "1.5"
+set my_revision "July 10th, 1999"
+
+# Set this to the hostname where ndaemon is running.   SET_THIS
+set default_host "localhost"
+set remote_port "5005"
+
+wm title . "tkSnips"
+wm protocol . WM_DELETE_WINDOW "handle_wclose ."
+
+# --------------------------------------------------------------------------
+# Subroutine: Print program usage and exit.
+
+proc print_usage { } {
+
+    global argv0 my_version my_revision
+
+    puts "tkSnips version $my_version ($my_revision)\n"
+    puts "Syntax: $argv0 \[options\] \[ndaemon-hostname\]"
+    puts "\t-a\t autosize window to display all updates on a single screen"
+    puts "\t-b\t turn beep-on-change on"
+    puts "\t-s\t turn small-font mode on"
+    puts "\t-x\t turn extended (wide-screen) mode on"
+    puts "\t-dn\t never display change window"
+    puts "\t-do\t display change window only when iconified"
+    puts "\t-da\t always display change window"
+    puts "\t-li\t display info severity level and above"
+    puts "\t-lw\t display warning severity level and above"
+    puts "\t-le\t display error severity level and above"
+    puts "\t-lc\t display critical severity level only"
+    puts ""
+
+    exit
+}
+
+# --------------------------------------------------------------------------
+# Initialization
+
+tix config -scheme Gray -fontset 12Point
+
+set smallfont "-*-fixed-*-*-*-*-*-70-*-*-*-*-*-*"
+set smallspace 1.45
+
+# Choose font based on Unix or Windows.
+
+set stdfont "fixed"
+if { $tcl_platform(platform) != "unix" } {
+    set stdfont "ansifixed"
+}
+
+set stdspace 1.33
+
+set my_font $stdfont
+set font_space $stdspace
+
+set severity "BAD-0 Critical Error Warning Info BAD-5"
+
+set sev_level 2
+
+# Our default window size is actually 15 lines; we throw in the extra
+# lines for spacing.
+
+set wsize_lines 20
+set chsize_lines 0
+
+# 80 characters for normal mode, 112 characters for extended mode.
+
+set wwidth 80
+
+set send_beep 0
+set last_update [clock seconds]
+
+set popup_when 1
+
+set filter_count(1) 0
+set filter_count(2) 0
+set filter_count(3) 0
+set filter_count(4) 0
+
+set header_string(80) "Device           Address         Time       Variable    Value    Condition"
+
+set header_string(112) "Device           Address         Time       Variable    Value    Condition  TT Number      Status"
+
+set ttstatus(-1) ""
+set ttstatus(-2) "CHECK TICKET"
+set ttstatus(0) "New"
+set ttstatus(1) "Assigned"
+set ttstatus(2) "Fixed"
+set ttstatus(3) "Awaiting"
+set ttstatus(4) "Rejected"
+set ttstatus(5) "Closed"
+
+# --------------------------------------------------------------------------
+# Parse command-line options
+
+set remote_host $default_host
+
+if { $argc > 0 } {
+    for { set argp 0 } { $argp < $argc } { incr argp } {
+	set this_arg [lindex $argv $argp]
+	if { [string compare $this_arg "-a" ] == 0 } {
+	    set wsize_lines 0
+	} elseif { [string compare $this_arg "-b" ] == 0 } {
+	    set send_beep 1
+	} elseif { [string compare $this_arg "-x" ] == 0 } {
+	    set wwidth 112
+	} elseif { [string compare $this_arg "-dn" ] == 0 } {
+	    set popup_when 0
+	} elseif { [string compare $this_arg "-do" ] == 0 } {
+	    set popup_when 1
+	} elseif { [string compare $this_arg "-da" ] == 0 } {
+	    set popup_when 2
+	} elseif { [string compare $this_arg "-li" ] == 0 } {
+	    set sev_level 4
+	} elseif { [string compare $this_arg "-lw" ] == 0 } {
+	    set sev_level 3
+	} elseif { [string compare $this_arg "-le" ] == 0 } {
+	    set sev_level 2
+	} elseif { [string compare $this_arg "-lc" ] == 0 } {
+	    set sev_level 1
+	} elseif { [string compare $this_arg "-fs" ] == 0 } {
+	    set my_font $smallfont
+	    set font_space $smallspace
+	} elseif { [string compare $this_arg "help" ] == 0 } {
+	    print_usage
+	} elseif { [string compare $this_arg "version" ] == 0 } {
+	    print_usage
+	} elseif { [string match "-*" $this_arg ] } {
+	    puts "$argv0: Unrecognized option $this_arg\n"
+	    print_usage
+	} else {
+	    set remote_host $this_arg
+	}
+    }
+}
+
+puts "\t Connecting to $remote_host, port $remote_port \n"
+
+set basecolor [tixDisplayStyle text -font fixed -foreground gray]
+set textcolor(1) [tixDisplayStyle text -font $my_font -foreground red]
+set textcolor(2) [tixDisplayStyle text -font $my_font -foreground yellow]
+set textcolor(3) [tixDisplayStyle text -font $my_font -foreground cyan]
+set textcolor(4) [tixDisplayStyle text -font $my_font -foreground white]
+
+# --------------------------------------------------------------------------
+# Menu bar setup
+
+frame .mbar -relief raised -borderwidth 2
+pack .mbar -side top -fill x
+
+# -- File menu
+
+menubutton .mbar.file -underline 0 \
+	-text "File" -menu .mbar.file.menu
+pack .mbar.file -side left
+
+menu .mbar.file.menu
+
+.mbar.file.menu add command -underline 0 -label "Status" -command { do_status }
+.mbar.file.menu add separator
+.mbar.file.menu add command -underline 0 -label "Quit" -command { do_quit }
+
+# -- Edit menu
+
+menubutton .mbar.edit -underline 0 -text "Edit" -menu .mbar.edit.menu
+pack .mbar.edit -side left
+
+menu .mbar.edit.menu
+
+.mbar.edit.menu add command -label "Clear Filters" \
+	-command { do_clearfilters }
+
+.mbar.edit.menu add command -label "Clear Selection" \
+	-command { do_clearselect }
+
+.mbar.edit.menu add separator
+
+.mbar.edit.menu add cascade -label "View Condition" -menu .mbar.edit.menu.vcond
+menu .mbar.edit.menu.vcond
+
+.mbar.edit.menu.vcond add command \
+	-label [lindex $severity 4] \
+	-command { do_view_cond 4 }
+.mbar.edit.menu.vcond add command \
+	-label [lindex $severity 3] \
+	-command { do_view_cond 3 }
+.mbar.edit.menu.vcond add command \
+	-label [lindex $severity 2] \
+	-command { do_view_cond 2 }
+.mbar.edit.menu.vcond add command \
+	-label [lindex $severity 1] \
+	-command { do_view_cond 1 }
+
+# -- Options menu
+
+menubutton .mbar.opts -underline 0 -text "Options" -menu .mbar.opts.menu
+pack .mbar.opts -side left
+
+menu .mbar.opts.menu
+
+.mbar.opts.menu add cascade -label "Minimum severity to display" -menu .mbar.opts.menu.sev
+menu .mbar.opts.menu.sev
+
+.mbar.opts.menu.sev add radiobutton -variable sev_level \
+	-label [lindex $severity 4] \
+	-value 4 -command { do_change_severity 4 }
+.mbar.opts.menu.sev add radiobutton -variable sev_level \
+	-label [lindex $severity 3] \
+	-value 3 -command { do_change_severity 3 }
+.mbar.opts.menu.sev add radiobutton -variable sev_level \
+	-label [lindex $severity 2] \
+	-value 2 -command { do_change_severity 2 }
+.mbar.opts.menu.sev add radiobutton -variable sev_level \
+	-label [lindex $severity 1] \
+	-value 1 -command { do_change_severity 1 }
+
+.mbar.opts.menu add cascade -label "Lines to display in main window" -menu .mbar.opts.menu.wsize
+menu .mbar.opts.menu.wsize
+
+.mbar.opts.menu.wsize add radiobutton -variable wsize_lines \
+	-label "All" -value 0 -command { do_resize_main }
+.mbar.opts.menu.wsize add radiobutton -variable wsize_lines -label "1" \
+	-value 1 -command { do_change_wsize 1 }
+.mbar.opts.menu.wsize add radiobutton -variable wsize_lines -label "5" \
+	-value 5 -command { do_change_wsize 5 }
+.mbar.opts.menu.wsize add radiobutton -variable wsize_lines -label "10" \
+	-value 10 -command { do_change_wsize 10 }
+.mbar.opts.menu.wsize add radiobutton -variable wsize_lines -label "15" \
+	-value 15 -command { do_change_wsize 15 }
+.mbar.opts.menu.wsize add radiobutton -variable wsize_lines -label "20" \
+	-value 20 -command { do_change_wsize 20 }
+.mbar.opts.menu.wsize add radiobutton -variable wsize_lines -label "25" \
+	-value 25 -command { do_change_wsize 25 }
+.mbar.opts.menu.wsize add radiobutton -variable wsize_lines -label "30" \
+	-value 30 -command { do_change_wsize 30 }
+.mbar.opts.menu.wsize add radiobutton -variable wsize_lines -label "35" \
+	-value 35 -command { do_change_wsize 35 }
+.mbar.opts.menu.wsize add radiobutton -variable wsize_lines -label "40" \
+	-value 40 -command { do_change_wsize 40 }
+.mbar.opts.menu.wsize add radiobutton -variable wsize_lines -label "45" \
+	-value 45 -command { do_change_wsize 45 }
+.mbar.opts.menu.wsize add radiobutton -variable wsize_lines -label "50" \
+	-value 50 -command { do_change_wsize 50 }
+
+.mbar.opts.menu add cascade -label "Display change window" -menu .mbar.opts.menu.dch
+menu .mbar.opts.menu.dch
+
+.mbar.opts.menu.dch add radiobutton -variable popup_when \
+	-label "Never" -value 0
+.mbar.opts.menu.dch add radiobutton -variable popup_when \
+	-label "Only when iconified" -value 1
+.mbar.opts.menu.dch add radiobutton -variable popup_when \
+	-label "Always" -value 2
+
+.mbar.opts.menu add cascade -label "Lines to display in change window" -menu .mbar.opts.menu.chsize
+menu .mbar.opts.menu.chsize
+
+.mbar.opts.menu.chsize add radiobutton -variable chsize_lines \
+	-label "All" -value 0 -command { do_resize_dialog }
+.mbar.opts.menu.chsize add radiobutton -variable chsize_lines -label "1" \
+	-value 1
+.mbar.opts.menu.chsize add radiobutton -variable chsize_lines -label "5" \
+	-value 5
+.mbar.opts.menu.chsize add radiobutton -variable chsize_lines -label "10" \
+	-value 10
+.mbar.opts.menu.chsize add radiobutton -variable chsize_lines -label "15" \
+	-value 15
+.mbar.opts.menu.chsize add radiobutton -variable chsize_lines -label "20" \
+	-value 20
+.mbar.opts.menu.chsize add radiobutton -variable chsize_lines -label "25" \
+	-value 25
+
+.mbar.opts.menu add separator
+
+.mbar.opts.menu add checkbutton -label "Extended display" \
+	-variable wwidth -onvalue 112 -offvalue 80 \
+	-command { .list configure -width $wwidth }
+
+.mbar.opts.menu add checkbutton -label "Beep on change" -variable send_beep
+
+# -- Help menu.
+
+menubutton .mbar.help -underline 0 -text "Help" -menu .mbar.help.menu
+pack .mbar.help -side left
+
+menu .mbar.help.menu
+
+.mbar.help.menu add command -label "Help" -command { do_help }
+.mbar.help.menu add command -label "About tkSnips" -command { do_about }
+.mbar.help.menu add command -label "Version Info" -command { do_info }
+
+# -- Debug menu. Comment out the pack line to hide this.
+
+menubutton .mbar.debug -underline 0 -text "Debug" -menu .mbar.debug.menu
+#pack .mbar.debug -side left
+
+menu .mbar.debug.menu
+
+.mbar.debug.menu add command -label "View Filters" -command { do_view_filters }
+.mbar.debug.menu add command -label "View Previous" -command { do_view_prev }
+
+# --------------------------------------------------------------------------
+# The status bar
+
+label .status -relief sunken -borderwidth 1 -anchor w
+pack .status -side bottom -fill x
+
+.status config -text "Waiting for SNIPS data from $remote_host..."
+
+# --------------------------------------------------------------------------
+# The text display area.
+
+tixTList .list -font $my_font \
+	-width $wwidth -height $wsize_lines -yscrollcommand ".scrl set" \
+	-selectmode extended -orient horizontal -pady 0 \
+	-foreground gray -background black
+
+scrollbar .scrl -command ".list yview"
+pack .scrl -side right -fill y
+
+pack .list -side left -fill x
+
+# --------------------------------------------------------------------------
+# Binding in the text display area.
+#
+# A double-click on an item puts it in the deleted list. Items in the
+# deleted list are considered filtered. Only the device name, variable
+# name, and severity are kept for this purpose.
+
+bind .list <Double-Button-1> {
+    do_filter_set
+}
+
+proc do_filter_set { } {
+
+    global severity filter_array filter_count
+
+    set list_num [.list info selection]
+
+    if { ($list_num != "") && ($list_num != 0) } {
+
+	scan [.list entrycget $list_num -text] \
+		"%15s  %15s %s  %12s %8s    %s" \
+		x_device_name x_device_addr x_time x_var_name x_var_val x_sev
+
+	set list_sev [lsearch $severity $x_sev]
+
+	set filter_array($x_device_name-$x_device_addr-$x_var_name) $list_sev
+	incr filter_count($list_sev)
+
+	.list delete $list_num
+	do_resize_main
+
+	update_status
+    }
+}
+
+# --------------------------------------------------------------------------
+# Networking setup.
+
+set sockid [socket $remote_host $remote_port]
+fconfigure $sockid -blocking no
+fileevent $sockid readable handle_socket
+
+# --------------------------------------------------------------------------
+#               THIS IS THE END OF THE MAIN PROGRAM.
+#               EVERYTHING BELOW THIS LINE IS A SUBROUTINE.
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+# Subroutine: display some information about us.
+
+proc do_info { } {
+
+    global my_version my_revision my_admin
+
+    tk_messageBox -parent . -title "Version Info" -type ok -icon info \
+	    -message "tkSnips version $my_version\nLast revised $my_revision\n\nLocal Admin: $my_admin\n\nAuthor: Lydia Leong (lwl@godlike.com)"
+
+}
+
+# --------------------------------------------------------------------------
+# Subroutine: display where we're connected to.
+
+proc do_status { } {
+
+    global remote_host
+
+    tk_messageBox -parent . -title "Status Info" -type ok -icon info \
+	    -message "Connected to $remote_host"
+
+}
+
+# --------------------------------------------------------------------------
+# Subroutine: clean up and exit.
+
+proc do_quit { } {
+    global sockid
+    close $sockid
+    exit
+}
+
+# --------------------------------------------------------------------------
+# Subroutine: clear the selection.
+
+proc do_clearselect { } {
+    .list selection clear
+}
+
+# --------------------------------------------------------------------------
+# Subroutine: clear the filters.
+
+proc do_clearfilters { } {
+
+    global filter_array filter_count
+
+    if { [info exists filter_array] } {
+	unset filter_array
+    }
+
+    set filter_count(1) 0
+    set filter_count(2) 0
+    set filter_count(3) 0
+    set filter_count(4) 0
+
+    update_status
+}
+
+# --------------------------------------------------------------------------
+# Subroutine: change the size of the display area. Must be one greater
+# than specified, in order to accomodate header.
+
+proc do_change_wsize { num } {
+    global font_space
+    .list configure -height [expr round(ceil(($num + 1) * $font_space))]
+}
+
+# --------------------------------------------------------------------------
+# Subroutine: resize windows to fit text displayed in them.
+
+proc do_resize_main { } {
+    global font_space
+    .list configure -height [expr round(ceil([.list info size] * $font_space))]
+}
+
+proc do_resize_dialog { } {
+    if { [winfo exists .dtop] } {
+	.dtop.changes configure -height [.dtop.changes size]
+    }
+}
+
+# --------------------------------------------------------------------------
+# Subroutine: change the severity value.
+
+proc do_change_severity { num } {
+
+    global severity sockid
+
+    puts $sockid "SEVLEVEL $num"
+    flush $sockid
+
+    .status config -text "Next update will be displayed at [lindex $severity $num] level."
+}
+
+# --------------------------------------------------------------------------
+# Subroutine: display only items of a given severity in a dialog box.
+
+proc do_view_cond { num } {
+
+    global severity header_string last_update wwidth my_font
+
+    set nitems [.list info size]
+    set sev_name [lindex $severity $num]
+    set thiswin ".cond$sev_name"
+
+    if { [winfo exists $thiswin ] } {
+	tk_messageBox -parent . -title "Error" -type ok -icon error \
+		-message "Dismiss the current Condition $sev_name window first."
+	return
+    }
+
+    toplevel $thiswin -class Dialog
+    wm transient $thiswin .
+    wm geometry $thiswin +350+25
+    wm protocol $thiswin WM_DELETE_WINDOW "handle_wclose $thiswin"
+    wm title $thiswin "Condition: $sev_name"
+
+    button $thiswin.ok -relief groove -borderwidth 2 \
+	    -text "Dismiss" -command "handle_wclose $thiswin"
+    pack $thiswin.ok -side top
+
+    listbox $thiswin.stuff -width $wwidth -height 1 \
+	    -selectmode extended -exportselection true -font $my_font
+
+    $thiswin.stuff insert end $header_string($wwidth)
+
+    for { set i 0 } { $i < $nitems } { incr i } {
+	set str [.list entrycget $i -text]
+	if { [string match "* $sev_name*" $str] } {
+	    $thiswin.stuff insert end $str
+	}
+    }
+
+    $thiswin.stuff configure -height [$thiswin.stuff size]
+    pack $thiswin.stuff -side left
+
+    $thiswin.ok configure \
+	    -text "Dismiss [expr [$thiswin.stuff size] - 1] $sev_name items (updated [clock format $last_update -format "%T"])"
+
+}
+
+# --------------------------------------------------------------------------
+# Subroutine: update status bar.
+
+proc update_status { } {
+
+    global sev_level severity item_count filter_count last_update
+
+    if { $sev_level == 1 } {
+	set sev_str "[lindex $severity 1]: [expr $item_count(1) - $filter_count(1)]/$item_count(1)."
+    } elseif { $sev_level == 2 } {
+	set sev_str "[lindex $severity 1]: [expr $item_count(1) - $filter_count(1)]/$item_count(1). [lindex $severity 2]: [expr $item_count(2) - $filter_count(2)]/$item_count(2)."
+    } elseif { $sev_level == 3 } {
+	set sev_str "[lindex $severity 1]: [expr $item_count(1) - $filter_count(1)]/$item_count(1). [lindex $severity 2]: [expr $item_count(2) - $filter_count(2)]/$item_count(2). [lindex $severity 3]: [expr $item_count(3) - $filter_count(3)]/$item_count(3)."
+    } else {
+	set sev_str "[lindex $severity 1]: [expr $item_count(1) - $filter_count(1)]/$item_count(1). [lindex $severity 2]: [expr $item_count(2) - $filter_count(2)]/$item_count(2). [lindex $severity 3]: [expr $item_count(3) - $filter_count(3)]/$item_count(3). [lindex $severity 4]: [expr $item_count(4) - $filter_count(4)]/$item_count(4)."
+    }
+
+    .status config -text "Last update at [clock format $last_update -format "%T"]. $sev_str Total displayed: [expr [.list info size] - 1]."
+}
+
+# --------------------------------------------------------------------------
+# Subroutine: handle input from the network.
+#
+# Order: device name (0), device address (1), month-day (2), time (3),
+# sender (4), variable name (5), variable value (6), variable threshhold (7),
+# variable units (8), nocop (9), severity (10)
+# Optional additional for leased lines: ticket number (11), ticket status (12)
+
+proc handle_socket { } {
+
+    global \
+	    change_list \
+	    chsize_lines \
+	    filter_array \
+	    header_string \
+	    item_count \
+	    last_update \
+	    my_font \
+	    need_bell \
+	    popup_when \
+	    previous_array \
+	    send_beep \
+	    severity \
+	    sockid \
+	    textcolor \
+	    this_update \
+	    track_changes \
+	    ttstatus \
+	    wsize_lines \
+	    wwidth
+
+    # need_bell, this_update, track_changes, and change_list are local
+    # to this function, but are static variables.
+
+    while { [gets $sockid in_line] > 0 } {
+
+	if { [string compare $in_line "BEGIN" ] == 0 } {
+
+	    # We're at the beginning of an update. Do some initialization.
+
+	    set need_bell 0
+	    set this_update [clock seconds]
+
+	    .list delete 0 [.list info size]
+	    .list insert end -text $header_string($wwidth)
+
+	    # If popup_when is 0, never do it. If it's 1, do it only when
+	    # iconified. If it's 2, do it always.
+
+	    if { ($popup_when == 2) || \
+		    (($popup_when == 1) && \
+		    ! [winfo ismapped .]) } {
+		set track_changes 1
+		if { [info exists change_list ] } {
+		    unset change_list
+		}
+		lappend change_list "$header_string($wwidth)"
+	    } else {
+		set track_changes 0
+	    }
+
+	    set item_count(1) 0
+	    set item_count(2) 0
+	    set item_count(3) 0
+	    set item_count(4) 0
+	 
+	    break
+	}
+
+	if { [string compare $in_line "END" ] == 0 } {
+
+	    # We're at the end of an update. Clean up various things.
+
+	    # Size to fit, if necessary.
+
+	    if { $wsize_lines == 0 } {
+		do_resize_main
+	    }
+
+	    # Get rid of the legacy information from the previous iteration.
+
+	    foreach elem [array names previous_array] {
+		if { [string match "$last_update-*" $elem] } {
+		    unset previous_array($elem)
+		}
+	    }
+
+	    # If we've got a non-zero change list (need_bell is set), then we
+	    # need to pop up a dialog box. If we already have a dialog box up
+	    # there, then we need to update it.
+
+	    if { ($need_bell == 1) && ($track_changes == 1) } {
+
+		if { [winfo exists .dtop] != 1 } {
+
+		    # No dialog box there currently. Go create it.
+
+		    toplevel .dtop -class Dialog
+		    wm transient .dtop .
+		    wm geometry .dtop +350+50
+		    wm protocol .dtop WM_DELETE_WINDOW "handle_wclose .dtop"
+
+		    button .dtop.ok -relief groove -borderwidth 2 \
+			    -text "Acknowledge Changes" \
+			    -command "handle_wclose .dtop"
+		    pack .dtop.ok -side top -fill x
+
+		    listbox .dtop.changes -width $wwidth \
+			    -height [expr $chsize_lines + 1] \
+			    -yscrollcommand ".dtop.scroll set" \
+			    -selectmode extended -exportselection true \
+			    -font $my_font
+		    scrollbar .dtop.scroll -command ".dtop.changes yview"
+		    pack .dtop.scroll -side right -fill y
+		    pack .dtop.changes -side left
+
+		} else {
+
+		    # If we already have a dialog box, erase what we have
+		    # now in the changes window.
+
+		    .dtop.changes delete 0 [.dtop.changes size]
+		}
+
+		wm title .dtop \
+		  "SNIPS Update at [clock format $last_update -format "%T"]"
+
+		.dtop.ok configure \
+		  -text "Acknowledge [expr [llength $change_list] - 1] Changes"
+
+		foreach elem $change_list {
+		    .dtop.changes insert end $elem
+		}
+
+		if { $chsize_lines == 0 } {
+		    .dtop.changes configure -height [.dtop.changes size]
+		}
+	    }
+
+	    # Now do other updating.
+	    
+	    if { ($need_bell != 0) && ($send_beep == 1) } {
+		bell
+	    }
+
+	    set last_update $this_update
+
+	    update_status
+
+	    break
+	}
+
+	# Or else we have just another update.
+
+	set in_array [split $in_line !]
+	set in_device_name [lindex $in_array 0]
+	set in_device_addr [lindex $in_array 1]
+	set in_time [lindex $in_array 3]
+	set in_var_name [lindex $in_array 5]
+	set in_severity [lindex $in_array 10]
+
+	incr item_count($in_severity)
+
+	set alert_index "$in_device_name-$in_device_addr-$in_var_name"
+
+	# Check if we're filtering this. If the severities match, then
+	# we don't display. If the severities don't match, then we remove
+	# the filter and display. Otherwise we just display.
+
+	if { [info exists filter_array($alert_index)] } {
+	    if { $filter_array($alert_index) == $in_severity } {
+		continue
+	    } else {
+		unset filter_array($alert_index)
+	    }
+	}
+
+	# Check if we've seen this before. If we haven't, then we
+	# need to set things to ring the bell. Here we index by time
+	# as well as other stuff.
+
+	set prev_index "$last_update-$alert_index-$in_time"
+	set is_change 0
+
+	if { [info exists previous_array($prev_index) ] } {
+	    if { $previous_array($prev_index) != $in_severity } {
+		set need_bell 1
+		set is_change 1
+	    }
+	} else {
+	    set need_bell 1
+	    set is_change 1
+	}
+
+	set previous_array($this_update-$alert_index-$in_time) $in_severity
+
+	# Now go print it.
+
+	if { $wwidth == 80 } {
+	    set fmt [format "%15.15s  %-15.15s %s  %12.12s %8s    %s" \
+		    $in_device_name \
+		    $in_device_addr \
+		    $in_time \
+		    $in_var_name \
+		    [lindex $in_array 6] \
+		    [lindex $severity $in_severity] \
+		    ]
+	} else {
+	    set ticket_status [lindex $in_array 12]
+
+	    set fmt [format "%15.15s  %-15.15s %s  %12.12s %8s    %-8.8s   %-12.12s   %s" \
+		    $in_device_name \
+		    $in_device_addr \
+		    $in_time \
+		    $in_var_name \
+		    [lindex $in_array 6] \
+		    [lindex $severity $in_severity] \
+		    [lindex $in_array 11] \
+		    $ttstatus([lindex $in_array 12]) \
+		]
+	}
+
+	.list insert end -text "$fmt" -style $textcolor($in_severity)
+
+	# For more fun and games, if we're iconified, and we've chosen
+	# pop-up alerts, we should also make a list of the things we've
+	# gotten as changes.
+
+	if { ($is_change == 1) && ($track_changes == 1) } {
+	    lappend change_list "$fmt"
+	}
+    }
+}
+
+# --------------------------------------------------------------------------
+# Subroutine: Handle a window close.
+
+proc handle_wclose { widgetname } {
+
+    if { $widgetname == "." } {
+	set result [tk_messageBox -parent . -title "Quit?" -type yesno \
+		-icon warning -message "Do you really want to quit?"]
+	if { $result == "yes" } {
+	    do_quit
+	}
+    } else {
+	destroy $widgetname
+    }
+}
+
+# --------------------------------------------------------------------------
+# Subroutine: Spew help at a user.
+
+proc do_help { } {
+
+    if { [winfo exists .helptop] } {
+	tk_messageBox -parent . -title "Error" -type ok -icon error \
+		-message "The information has already been displayed."
+    } else {
+
+	toplevel .helptop -class Dialog
+	wm transient .helptop .
+	wm geometry .helptop +350+100
+	wm protocol .helptop WM_DELETE_WINDOW "handle_wclose .helptop"
+	wm title .helptop "tkSnips Help"
+
+	text .helptop.msg -yscrollcommand ".helptop.scroll set" \
+		-width 80 -height 25 -wrap word
+
+	.helptop.msg insert 1.0 \
+"
+tkSnips is a client of SNIPS. It receives updates once per timeslice\
+(in general, once every fifteen seconds), and displays the current status\
+of the items that SNIPS is monitoring, in the main window. tkSnips also\
+has a change window, for displaying only the items which have changed\
+during this iteration.
+
+There are four Severity Levels: Info, Warning, Error, and\
+Critical. tkSnips only displays items which are at the selected\
+severity level, or higher. The default is the Error level. The\
+default can be changed by specifying -li, -lw, -le, or -lc on the\
+command-line, or it can be changed through the Options menu.\
+Note that if you choose a severity level for which there are no\
+updates, the bottom status bar will not change -- don't be alarmed\
+if this happens to you, this is normal behavior.
+
+The font used by tkSnips can be either the standard fixed font, or\
+a small fixed font. Use the command-line option -fs to get the smaller\
+font.
+
+The main window can be sized according to your personal tastes,\
+through the Options menu. You can either make the window a fixed size\
+(it defaults to 15 lines), or opt to have the window be whatever size\
+is necessary to display all the data. Autosizing the window can be also\
+be done with the -a command-line option.
+
+The main window can either be normal or wide (extended mode). In the\
+latter, ticket number and status, if available, will also be displayed.\
+This can be controlled through the Options menu, or the command-line\
+option -x.
+
+The change window is also controlled through the Options menu. If you\
+select Never Display, it will never be displayed -- you'll just need\
+to look through the data for changes. If you select Display Only When\
+Iconified (the default), the change window will only pop up if you\
+iconify the main window. If you select Display Always, the change\
+window will always pop up, regardless of the main window's status.\
+This can be selected on the command line with -dn, -do, and -da,\
+respectively.
+
+If you click on the Acknowledge button in the change window, it will\
+disappear until another change occurs. Otherwise, it will be updated\
+with new changes. Note that previously-displayed changes will be wiped\
+out by the next set of changes.
+
+Like the main window, the change window's size can be chosen through\
+the Options menu. It defaults to dynamically resizing to fit the\
+current data.
+
+Items that are considered to be the 'same' (i.e., not changes) have\
+the same Device, Address, Time, and Condition. A change in any of those\
+factors results in the item being marked as new.
+
+The Options menu contains a checkbox which indicates whether or not a\
+beep sounds when changes occur. It defaults to no beep. It can also be\
+changed on the command-line with the -b option.
+
+If you double-click on a selection in the main window, it will\
+disappear.  The item is considered to be 'filtered'. For a given Device\
+name and Address, as long as the Condition (severity) remains\
+constant, that item will not be displayed.  If the Condition changes,\
+the filter will be removed and the item will be displayed again. Note\
+that this is handled differently from changes, which look at Time in\
+addition to the other three factors. Filters can be cleared\
+through the Edit menu.
+
+The bottom line of the main window is a status bar. It lists the time that\
+data was last received from the SNIPS server, as well as the number of items\
+of each Condition currently being displayed. Note that if, for example,\
+you have only Error severity and higher displayed, that the status bar\
+will only count Error and Critical severity items. For each condition,\
+two numbers are displayed. The first is the number of items actually\
+displayed. The second is the number of items received from the server.\
+By subtracting the first from the second, you can obtain a count of how\
+many items are getting filtered.
+
+           -Lydia Leong (lwl@godlike.com)
+"
+
+        .helptop.msg configure -state disabled
+        scrollbar .helptop.scroll -command ".helptop.msg yview"
+	button .helptop.ok -relief groove -borderwidth 2 \
+		-text "Dismiss" -command "handle_wclose .helptop"
+
+        pack .helptop.scroll -side right -fill y
+	pack .helptop.ok -side bottom
+	pack .helptop.msg -side left
+    }
+}
+
+# --------------------------------------------------------------------------
+# Subroutine: Spew info at a user.
+
+proc do_about { } {
+
+    if { [winfo exists .abtop] } {
+	tk_messageBox -parent . -title "Error" -type ok -icon error \
+		-message "The information has already been displayed."
+    } else {
+
+	toplevel .abtop -class Dialog
+	wm transient .abtop .
+	wm geometry .abtop +350+100
+	wm protocol .abtop WM_DELETE_WINDOW "handle_wclose .abtop"
+	wm title .abtop "About tkSnips"
+
+	message .abtop.msg -text \
+"
+tkSnips is a Tcl 7.6 / Tk 4.2 / Tix 4.1 client for the SNIPS\
+monitoring system.  It performs a function similar to SNIPS's\
+NetConsole, and requires a server-side component, called\
+NDaemon. NDaemon reads and processes SNIPS data files in a manner\
+similar to NetConsole, and multiplexes client connections, delivering\
+the necessary data over the network.
+
+The NDaemon model offers significant performance gains over SNIPS's\
+normal mode of operation, which requires every user to actually log\
+into the machine and run NetConsole, resulting in the data files being\
+polled once every timeslice (generally, 15 seconds) for each\
+client. This is expensive in terms of CPU, memory, and disk I/O, and\
+it weakens the security model.
+
+For a description of tkSnips's features, please see the help text.
+"
+
+	pack .abtop.msg
+
+	button .abtop.ok -relief groove -borderwidth 2 \
+		-text "Dismiss" -command "handle_wclose .abtop"
+	pack .abtop.ok -side bottom
+    }
+}
+
+# --------------------------------------------------------------------------
+#               THIS IS THE END OF THE MAIN SUBROUTINES.
+#               EVERYTHING BELOW THIS LINE IS FOR DEBUGGING.
+# --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+# Debugging subroutine: look at all the filters.
+
+proc do_view_filters { } {
+
+    global filter_array
+
+    foreach elem [array names filter_array] {
+	puts "$elem ... $filter_array($elem)"
+    }
+}
+
+# --------------------------------------------------------------------------
+# Debugging subroutine: look at all the previous info
+
+proc do_view_prev { } {
+
+    global previous_array
+
+    foreach elem [array names previous_array] {
+	puts "$elem ... $previous_array($elem)"
+    }
+}

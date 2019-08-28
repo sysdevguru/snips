@@ -1,0 +1,44 @@
+#!/usr/local/bin/perl
+#
+# $Header: /home/cvsroot/snips/perl-monitors/testlog,v 1.0 2001/07/09 04:33:20 vikas Exp $
+#
+# This is a test to send events to the snipslogd daemon using the Perl API.
+#
+# USAGE:
+#	./testlog [num of packets]
+# Run this and see if anything is being logged to 'snipslogd' at the
+# info level.
+#
+
+use strict;
+use vars qw ($snipsroot $debug $count);
+
+BEGIN {
+  $snipsroot = "/usr/local/snips"  unless $snipsroot;	# SET_THIS
+  push (@INC, "$snipsroot/etc"); push (@INC, "$snipsroot/bin");
+  require "snipsperl.conf" ;		# local customizations
+}
+
+use SNIPS;
+
+##########################
+if ($#ARGV >= 0) {  $count = int($ARGV[0]); }
+else { $count = 1; }
+
+my $event = new_event();
+alter_event($event, 'testlog', 'TestDevice', 'TestAddr', undef,
+		    'Packet', 'count');
+$debug = 5;				# set to 1 for debugging output
+$libdebug = 5;				# set to 1 for debugging output
+
+my %event = unpack_event($event);
+
+while ($count > 0)
+{
+  print "$count ";
+  $event{var_value} = $count;
+  SNIPS::eventlog(pack_event(%event));
+  --$count;
+}
+
+print "\nDid these packets get logged by snipslogd at the  INFO  level ?\n"; 

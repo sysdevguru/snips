@@ -1,0 +1,204 @@
+#!/usr/local/bin/perl -w
+#
+# $Header: /home/cvsroot/snips/perl-monitors/novellmon,v 1.0 2001/07/09 04:33:20 vikas Exp $
+#
+#	novellmon - perl snips Novell service monitor
+#
+# AUTHOR:
+# 	Original Version: John Wobus, jmwobus@mailbox.syr.edu, 9/21/1993
+#  	Rewrite for SNIPS:  vikas@navya.com 7/2000
+#
+#    (c) Syracuse University Computing & Network Services 1993
+#
+# No warranty is expressed or implied.  Permission to copy and use is
+# extended to all.  Permission to redistribute is granted under the
+# following conditions: it is not sold for profit; this copyright
+# notice remains intact; the same permissions extend to the recipient;
+# and if any changes are made, a notice is added so stating.
+#
+# What it does:
+#
+#    novellmon reads the list of Novell servers from a Cisco router and
+#    checks for the appearance of the services listed in its own
+#    configuration file and reports any that are missing.  Example:
+#
+#    Device      Address      Time   +-Variable-+ +-Value-+  Condition
+#    DINAH  4(files)        09:58    IPX server        0    Critical
+#
+#    This line states that a file server called DINAH is not available.
+#
+# Programs needed:
+#
+#   rcisco                      perl program to do a Cisco router
+#                               command remotely.
+# Snips event elements used:
+#   sender                     "novellmon"
+#   device
+#    name                      the Server name
+#    addr                      the numerical type of service and an
+#                               interpretation in parenthesis, e.g.
+#                               "4(files)" for file service.
+#   var                       
+#    name                      "IPX server"
+#    value                     1 means up, 0 means down
+#    threshold                 always 2
+#    units                     always "entry"
+#
+# Configuration file format:
+#    #<text>                                   Comment line.
+#    router=<router>                           Name of Cisco router.
+#    <servername> <servicetype>                IPX service, name & numerical
+#                                               type.
+#
+# Sample configuration file:
+#    # novellmon configuration
+#    router=mycisco.excellent.edu
+#    DINAH   4
+#
+##
+# Router output (new Cisco routers)
+# 
+#  Type   Name              Net      Address        Port  Route Hops Interface
+#  P      4 AG_COMM         4550280D.0000.0000.0001:0451  2/01  1    AT8/0.2
+#  P+     4 AG_REG          4550150C.0000.0000.0001:0451  2/01  1    Et0/3
+#  P      4 ALLIED_HEALTH   4550280A.0000.0000.0001:0451  2/01  1    AT8/0.2
+#
+# Old Cisco routers:
+#
+#  Type  Name  Net  Address      Port  Hops  Interface
+#  4     SysOp 2a.0206.00a2.41ec:0450  2     Ethernet5
+#
+## 
+##
+
+use strict;
+use vars qw ( $snipsroot $rcisco $debug $router
+	      $rprog $rpasswd $rcommand $varname $varunits $maxseverity
+	      %tname %found @items
+	    );
+
+BEGIN {
+  $snipsroot = "/usr/local/snips"  unless $snipsroot;	# SET_THIS
+  push (@INC, "$snipsroot/etc"); push (@INC, "$snipsroot/bin");
+  require "snipsperl.conf" ;		# local customizations
+}
+
+use SNIPS;
+
+############################
+## Variables customization #
+############################
+$rprog="$rcisco";			# Path for rcisco.
+$rpasswd="";				# if NULL, uses the default in rcisco
+# $rcommand="show ipx servers";	# on new Cisco versions
+$rcommand="show novell servers";
+$varname="IPX_server";		# Registered Novell Server
+$varunits="Entry" ;		# the var.units field in EVENT structure
+$s_pollinterval=60*5;			# Seconds to sleep between tries.
+$maxseverity = $E_ERROR ;	# max severity of events
+$debug = 0;			# set to 1 for debugging output
+############################
+
+-x $rprog || die("Could not find executable $rprog, exiting");
+
+# hash array of type numbers.
+%tname=("4","files", "47","printing", "10C","net3270", "7050","ipxbootp");
+
+##
+# Read the config file.
+#
+sub readconf {
+  my $event = new_event();
+  my $lineno = 0;
+
+  if ($debug == 0 && $libdebug > 0) {
+    $debug = $libdebug;
+    $libdebug = 1 if ($debug > 1) ;
+  }
+  $s_sender = 'novellmon' if ($s_sender eq "");
+
+  undef @items;
+  open(CONFIG,"<$s_configfile")||die("Couldn't find $s_configfile, exiting");
+  my $datafd = open_datafile($s_datafile, "w");
+  alter_event($event, $s_sender, undef, undef, undef, $varname, $varunits);
+
+  while(<CONFIG>)
+  {
+    ++$lineno;
+    chomp;
+    if(/^\s*\#/) {next;}   # skip comments
+    if(/^\s*$/)  {next;}   # skip blank lines
+
+    if (/^\s*RRDTOOL\s+ON/i)  { $SNIPS::dorrd = 1; next; }
+    if (/^\s*RRDTOOL\s+OFF/i) { $SNIPS::dorrd = 0; next; }
+    if (/^(sleepinterval)\s+(\d+)\s*$/i || /^(pollinterval)\s+(\d+)\s*$/i) {
+      $s_pollinterval = $2;
+      next;
+    }
+    if(/^\s*ROUTER\s*=?\s*(\S+)(\s+(\S+))?/i)  {
+      $router = $1;
+      $rpasswd = $3 if ($3);
+      next;
+    }
+    if(/^\s*(\S+)\s+(\S+)(\s.*)?$/) {
+      my ($name, $type) = ($1, $2);
+      push (@items, "$name\t$type");	# start index with 0, not 1
+      my $stype = "$type (" . $tname{$type} . ")";	# textual description
+      alter_event($event, undef, $name, $stype, undef, undef, undef);
+      write_event($datafd, $event);
+      next;
+    }
+    print "[$lineno] Ignoring illegal line: $_\n";
+  }
+  close(CONFIG);
+  if(!$router){die("No router specified in $s_configfile, exiting")};
+  if(0>$#items){die("Nothing to monitor in $s_configfile, exiting")};
+}
+
+
+## Check the current state of the servers from the router
+#
+sub get_server_states {
+  my ($loginok) = 0;
+  foreach(@items) {$found{$_}=0;}
+
+  my $command="$rprog $router ".' "'."$rpasswd".'" '.'"'."$rcommand".'"';
+  if ($debug) {print "(debug) dotest: running command $command\n" ;}
+
+  open(ROUTER,"$command|");
+
+  while(<ROUTER>) {
+    tr/\r\n//d;
+    if ( />/ ) {$loginok = 1 ;} # got the 'Router>' prompt
+    # Old cisco output
+    if(/^\s*(\S+)\s+(\S+)\s+(\S+)\s+(\d+)\s+(\S+)$/) {
+      my ($type, $name, $addr, $hops, $interface) = ($1, $2, $3, $4, $5);
+      $found{"$name\t$type"}=1;
+    }
+    # New Cisco output
+    if(/^\s*(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\d+)\s+(\S+)$/) {
+      my ($type, $name, $addr, $hops, $interface) = ($2, $3, $4, $6, $7);
+      $found{"$name\t$type"}=1;
+    }
+  }
+
+  close(ROUTER);
+  if ($loginok == 0) { print "Login into remote host failed\n" ;}
+
+}	# get_server_states()
+
+sub dotest {
+  my ($event, $i) = @_;	# $i starts from 1, not 0
+
+  &get_server_states if ($i == 1);	# at start of cycle
+
+  my $item = $items[$i - 1];	# since @items index starts from 0, not 1
+  # 	status, value, thres, maxseverity
+  return ($found{$item} > 0 ? 1 : 0, $found{$item}, 0, $maxseverity);
+}
+
+###
+### Main program:
+###
+
+&snips_main(\&readconf, undef, \&dotest);

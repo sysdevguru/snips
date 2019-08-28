@@ -1,0 +1,155 @@
+#!/usr/local/bin/perl -w
+#
+# SQLmon - monitor for DBI accessible SQL servers
+#
+# $Header: /home/cvsroot/snips/perl-monitors/sqlmon,v 1.1 2002/01/30 05:17:51 vikas Exp $
+#
+# Part of the SNIPS monitoring package.
+#
+## Contributed by Richard Beebe II (richard.beebe@yale.edu), Jan 2000.
+#  Derived from ciscomon
+#
+###
+# 	Initial version:  Rick Beebe (richard.beebe@yale.edu), Jan 2000
+#	Updates - nclemons@winstar.com (Jan 2000)
+#	Update for snips release - vikas@navya.com (June 2000)
+#	
+###
+#
+
+# Change the library path (@INC)
+# BEGIN { push (@INC, "blib/arch"); push (@INC, "blib/lib"); }
+
+use strict;
+use vars qw ( $snipsroot $debug $devcount
+	      @devicename @deviceaddr @maxseverity @varvalue @varthres
+	      @data_source @username @password @query_string
+	    );
+
+BEGIN {
+  $snipsroot = "/usr/local/snips"  unless $snipsroot;	# SET_THIS
+  push (@INC, "$snipsroot/etc"); push (@INC, "$snipsroot/bin");
+  require "snipsperl.conf" ;		# local customizations
+}
+
+use DBI;
+use SNIPS;
+
+$s_pollinterval = (60 * 10);		# Seconds to sleep between tries.
+$debug = 0;				# debug for this file
+$devcount = 0;
+
+# Read the config file.
+sub readconf {
+  my $event;
+  my $count = 0;	# reset
+  my $lineno = 0;
+
+  if ($debug == 0 && $libdebug > 0) {
+    $debug = $libdebug;
+    $libdebug = 1 if ($debug > 1) ;
+  }
+
+  open(CONFIG,"<$s_configfile") || die("Couldn't find $s_configfile, exiting");
+  my $datafd = open_datafile($s_datafile, "w");
+  $event = new_event();
+  alter_event($event, 'sqlmon', undef, undef, undef, 'SQLserver', 'Up');
+
+  while(<CONFIG>) {
+    ++$lineno;
+    chomp;
+    if(/^\s*\#/) {next;}   	# skip comments
+    if(/^\s*$/) {next;}		# skip blank lines
+
+    if (/^(sleepinterval)\s+(\d+)\s*$/i || /^(pollinterval)\s+(\d+)\s*$/i) {
+      $s_pollinterval = $2;
+      next;
+    }
+    
+    if (/^\s*RRDTOOL\s+ON/i)  { $SNIPS::dorrd = 1; next; }
+    if (/^\s*RRDTOOL\s+OFF/i) { $SNIPS::dorrd = 0; next; }
+    if (/^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)$/)
+    {
+      if (!$7) {
+	die "line $lineno does not have enough fields!";
+      }
+      ++$count;	# start with 1, not 0
+
+      ( $devicename[$count], $deviceaddr[$count], $maxseverity[$count],
+	$data_source[$count], $username[$count], $password[$count],
+        $query_string[$count] ) =
+	  ($1, $2, str2severity($3), $4, $5, $6, $7);
+
+      $varvalue[$count] = 1;	# unused
+      $varthres[$count] = 0;	# unused
+
+      # $event sender devname devip subdev varname varunits
+      alter_event($event, 'sqlmon', $devicename[$count], $deviceaddr[$count],
+		  undef, 'SQLserver', 'Up');
+      write_event($datafd, $event);
+      next;
+    }
+    else {
+      print "[$lineno] Ignoring illegal line: $_\n";
+    }
+    
+  }				# end while(CONFIG)
+  
+  close(CONFIG);
+  close_datafile($datafd);
+  $devcount = $count;
+
+  if ($devcount == 0) { die("Nothing to monitor in $s_configfile, exiting") };
+
+  if ($debug) {
+    print "Device list is:\n";
+    for ($count = 1; $count <= $devcount; ++$count) {
+      print "\t$devicename[$count]\n";
+    }
+  }
+
+}	# end: readconf
+
+##
+# Return   status, value, threshold, maxseverity
+sub dotest {
+  my ($event, $i) = @_;		# $i starts from 1, not 0
+  my ($rc, $failconnect) = (0, 0);
+  my ($dbh);
+
+  if ($debug) {
+    print "(debug) dotest: connecting to database ";
+    print "$data_source[$i] ($username[$i], $password[$i])\n";
+  }
+
+  $dbh = DBI->connect($data_source[$i], $username[$i], $password[$i]);
+  if ($dbh)
+  {
+    print "(debug) dotest: running command $query_string[$i]\n" if $debug;
+    if ( !($rc = $dbh->do($query_string[$i])) ) { 
+      print "(debug) $devicename[$i] : " . $dbh->errstr . "\n" if $debug; 
+      $rc = 0;
+    }
+    $dbh->disconnect;
+  }
+  else	# could not even connect
+  {
+    print "(debug) $devicename[$i] : $DBI::errstr" if $debug; 
+    $rc = 0; 
+  }
+
+  print "(debug) dotest: SQL query returned: ".$rc."\n" if $debug;
+
+ # 	status, value, thres, maxseverity
+  return ($rc > 0 ? 1 : 0, $rc, 0, $maxseverity[$i]);
+
+}	# sub dotest()
+
+###
+### main
+###
+
+&snips_main(\&readconf, undef, \&dotest);
+
+
+

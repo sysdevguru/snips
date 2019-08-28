@@ -1,0 +1,146 @@
+#!/usr/local/bin/perl 
+##
+#
+#  pm3dmmon - perl monitor for digital modem usage on PM3 Terminal Servers
+#
+#  -Vikas Aggarwal, vikas@navya.com
+#   PM3 modifications by Steve Milton (milton@isomedia.com)
+#
+#
+#####################
+#
+# pm3dmmon  reads a list of pm3 terminal servers to monitor (from
+# a config file) and thresholds. It then logs into the pm3's and
+# counts the number of active modems. When the # of modems in admin mode
+# exceeds the thresholds, the lines are displayed in SNIPS data format.  
+#
+# Supplemental Packages Required:
+#
+# pmcommand - from the pmconsole kit for Linux produced by Livingston.
+#
+# Files used:
+#
+# Snips event elements used:
+#   sender                     "dmmon"
+#   severity                   as read from the config file
+#   site
+#    name                      the pm3 name
+#    addr                      pm3 IP address
+#   var                       
+#    name                      "Modems"
+#    value                     1 means at Info level
+#    threshold                 as read from the config file
+#    units                     always "Available"
+#
+## 
+##
+#
+############################
+## Variables customization #  overrides values in the snipslib.pl library
+############################
+$prog =  "/usr/local/bin/pmcommand" ;	# location of 'pmcommand'
+$password = "password";
+
+############################
+$debug = 1;				# set to 1 for debugging output
+$libdebug = 0;				# set to 1 for debugging output
+$prognm = $0;				# save program name
+
+$varname="Modems";
+$varunits="Available" ;			# the var.units field in EVENT struct
+$sleepint=60*5;       			# Seconds to sleep between tries.
+
+require  "/snips/bin/snipslib.pl" ;
+
+-x $prog || die("Could not find executable $prog, exiting");
+
+##
+# Read the config file. Use '\t' as a separator for 'item'
+sub readconf {
+    local ($nets, $interface, $zone) ;
+
+    open(CONFIG,"<$cfile")||die("Couldn't find $cfile, exiting");
+    while(<CONFIG>)
+    {
+	chop;
+	if(/^\s*#/) {next;}   # skip comments
+	if(/^\s*$/) {next;}   # skip blank lines
+	if (/\s*(\S+)\s+(\S+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$/)
+	{
+	    $item="$1\t$2" ;	 # the name and address
+	    $wlevel{$item} = $3; # Warning level
+	    $elevel{$item} = $4; # Error level
+	    $clevel{$item} = $5; # Critical level
+	    push(@items,$item);
+	}
+	else {print "Ignoring illegal line: $_\n";}
+
+    }	# end while(CONFIG)
+
+    close(CONFIG);
+    if(0>$#items){die("Nothing to monitor in $cfile, exiting")};
+    if ($debug) {
+	print "Items are:\n"; foreach (@items) { print "\t$_\n" } ;
+    }
+}				# end: readconf
+
+
+# 
+## Check state of each terminal server
+##
+#
+sub dotest {
+    local ($host, $router) = @_ ;
+    local ($acount, $tcount, $isok) = (0, 0, 0);
+
+    if ($debug) { print "Checking $router\n"; }
+
+    -x $prog || die("Could not find executable $prog, exiting");
+
+    if ($debug) { 
+	print "Active cmd= $walkactive\nType cmd= $walktype\n\n" ;
+    }
+#
+# Output of PMCOMMAND command is:
+#
+    open (ACTIVE, "$prog -nostop $router $password /snips/etc/cmdfile.txt |") || die "Can't check active lines.";
+    if ($debug) { print "$prog -nostop $router $password /snips/etc/cmdfile.txt |\n"; }
+    while(<ACTIVE>){
+	chop;
+	$tcount++;
+	if (/\sACTIVE\s/) {
+	    $acount++;
+	    if ($debug) { print "ACTIVE-$acount/$tcount, "; }
+	}
+	if (/\sREADY\s/) {
+	    $acount++;
+	    if ($debug) { print "READY-$acount/$tcount, "; }
+	}
+    }
+    close(ACTIVE);
+    if ($debug) { print "\n"; }
+    $tcount -= 2;
+    if ($debug) {print "(debug)Active/Total modems: $acount/$tcount\n"; }
+
+    if ($acount < 0) { return (-1, 0); } # negative status to be ignored
+
+    ($isok, $varthres{$item}, $maxseverity) = 
+	&calc_status ($acount, $wlevel{$item}, $elevel{item}, $clevel{$item});
+
+    if ($debug) {print "(debug): Status $isok, MaxSev= $maxseverity\n";}
+    return ($isok, $acount);
+
+}	# end &dotest()
+
+
+###
+### main
+###
+
+## Since our dotest() and readconf() is pretty standard, we can call
+## the snipslib.pl routine snips_main() to do all the work for us...
+
+&snips_main;
+
+#
+

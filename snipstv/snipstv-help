@@ -1,0 +1,74 @@
+
+SNIPS TextView is a text based  display agent for the SNIPS network monitoring
+software.
+It displays the value and the state of the various monitored variables.
+
+	USAGE:	snipstv [-d (debug)] [-q (quiet)] [-w (wide display)]
+		[-l <level 1:4>] [alternate data directory]
+
+Prompt options:
+
+	b		- Bell on/off (toggle)
+	c		- Contract size of event display screen
+	d		- Debug mode (toggle)
+	f		- Freeze screen (toggle)
+	h		- help screen (this display)
+	l <level>	- set new display Level (from 1 to 4)
+	q		- Quit
+	r		- Refresh screen
+	s or /		- Search filter on event screen
+	x		- eXpand size of event display screen
+	v		- rotate between different event views
+	any key		- for next screen
+
+The User Screen:
+---------------
+The screen is divided into two sections- the EVENT section and the MESSAGES
+section. All device events are displayed in the EVENT section and any text
+messages are displayed in the MESSAGES section. These messages are displayed
+in rotation and scroll in each screenful.
+
+By default the screen is updated every 15 seconds. However, by using
+the 'freeze' option, the screen is updated only when the user hits
+a key.
+
+The size of the 'event' window can be manipulated using the 'c' (contract)
+and the 'x' (eXpand) keys. The message window grows correspondingly larger
+as the event window shrinks in size.
+
+Output Display Filter
+---------------------
+The output for the events can be filtered and only events matching a string
+be displayed on the screen. The syntax of the search pattern is:
+
+	word1 & word2 | word3
+
+so that only the events that have 'word1' and 'word2' (both together) OR
+word3 will be displayed. Regular expressions are not supported. All words
+are converted to lowercase for case insensetive matching.
+
+The filter is only applied to the 'visible' text, i.e. if currently the
+devices  'address' field is not displayed, then the filter will not applied
+to the address field.
+
+Rating
+------
+The rating indicates the status of the device for the previous 4 (or 8) polls.
+The most recent poll is on the left. The bit field is set to '1' for status
+UP and '0' for status down when polled.
+
+Terminal Type
+-------------
+If your terminal type is unsuitable, you are prompted for the type
+when you start the program. Common terminal types are:
+
+	vt100, vtxxx			DEC terminals
+	vt100-w, vt200-w		DEC terminals in 132 col mode
+	xterm				for X window terminal emulator
+	xterm-color			for color NCURSES support
+
+Mail comments/suggestions to info@netplex-tech.com.
+
+This software is available from http://www.netplex-tech.com/software/snips
+
+			======================

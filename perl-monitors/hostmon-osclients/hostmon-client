@@ -1,0 +1,546 @@
+#!/usr/local/bin/perl -w
+#
+# $Header: /home/cvsroot/snips/perl-monitors/hostmon-osclients/hostmon-client,v 1.2 2008/05/08 14:29:18 tvroon Exp $
+#
+#	hostmon-client.main
+#
+# Part of the SNIPS monitoring package. Run's system commands on the
+# system and prints out system statistics. Output is parsed by the
+# 'hostmon' server program which then generates output in the SNIPS format.
+# Includes systems specific files automatically i.e for LINUX includes
+# hostmon-client.linux etc.  All tests like pstat, df, vmstat are in
+# system specific file.
+#
+#	Copyright 1994, 1997 Vikas Aggarwal, vikas@navya.com
+#
+# Author:  Vikas Aggarwal,  vikas@navya.com
+#
+#
+# See COPYRIGHT file for full details.
+
+###
+# CONTAINS LINX HACK for monitoring NTP peers. <robl@linx.net>
+# define "@ntphosts" and add it in. Add 'ntppeerstat' to @monitorlist
+# to call it.
+###
+
+
+##
+#
+## Checks the following:
+#
+#	Uptime =	'uptime' (for reboots)
+#	Load average =	'uptime'
+#	NFS stats =	'nfsstat' -rc/-m/
+#	Swap space =	'pstat or swapon'
+#	CPU times =	'iostat'
+#	Disk i/o =	'iostat'
+#	Page Faults/Swaps =	'vmstat'
+#	Disk space =	'df'
+#	Network Interface =	'netstat' -m/-s/-i/
+#	Mail queue = 	'sendmail -bp' or 'qmail-qread'
+#	NTP Peer State = 'ntpq -p'
+#
+##
+## Output of this file
+##
+#	TIME 784419191 secs
+#	Uptime 62266 mins
+#	Load5 0 load-5min
+#	FileTable 13 %used
+#	InodeTable 13 %used
+#	ProcTable 13 %used
+#	SwapSpace 25140 MBytes
+#	NFStimeouts 0 %timeouts
+#	NFSrequests 7433383 requests
+#	DFspace_avail 6 MB /
+#	DFspace_%used 71 %full /
+#	DFspace_avail 72 MB /usr
+#	DFspace_%used 44 %full /usr
+#	DFspace_avail 354 MB /export/home
+#	DFspace_%used 22 %full /export/home
+#	DFinodes_avail 13699 inodes /
+#	DFinodes_%used 9 %inodes /
+#	DFinodes_avail 70880 inodes /usr
+#	DFinodes_%used 6 %inodes /usr
+#	DFinodes_avail 251048 inodes /export/home
+#	DFinodes_%used 1 %inodes /export/home
+#	IOseek 0.0 msps dk0
+#	IObw 3.2 %util dk0
+#	MemAvm 0 avm
+#	MemFree 14784 fre
+#	PageIn 0 pi
+#	PageOut 0 po
+#	CtxtSw  42 rate
+#	CPUus 2 %user
+#	CPUsy 1 %system
+#	CPUidle 97 %idle
+#	NetIErr 0 PktRate
+#	NetOErr 0 PktRate
+#	NetColl 0 PktRate
+#	MailQLocal 2 Length
+#	MailQDest  4 Length mail.abc.com
+#
+##
+use strict;
+use vars qw ( $SNIPS_LOGHOST $SENDMAIL $HOSTMON_SERVICE $HOSTMON_PORT $PSCMD
+	      $debug $sleeptime $dirname $pidfile $datafile $tmpfile $NTPQ
+	      $childpid $osfile @monitorlist @permithosts @ntphosts $peer
+	    );
+
+use POSIX ":sys_wait_h";      # signal and waitpid routines
+
+-f "snipsperl.conf" && require "snipsperl.conf";	# file is not essential
+
+############################
+## Variables customization #
+############################
+#
+## Define the list of permitted hosts that can connect to the hostmon port
+# and get data (the name of the host that runs the hostmon server)
+# Add the SNIPS loghost to this list also.
+$SNIPS_LOGHOST = "snips.your.domain" unless $SNIPS_LOGHOST;	# SET_THIS
+@permithosts = qw(127.0.0.1 localhost) unless @permithosts;
+push @permithosts, $SNIPS_LOGHOST;
+# $debug = 1;                             # set to 1 for debugging output
+
+# LINX hack for monitoring NTP peers we care about.
+# $NTPQ = '/usr/bin/ntpq' ; # Where's ntptrace program
+# @ntphosts = qw(ntp0.domain.net ntp1.domain.net ntp2.domain.net);
+ 
+$sleeptime = 5*60 ;
+# @monitorlist = qw(uptime pstat nfsstat df iostat vmstat netstat mailstat ntppeerstat);
+@monitorlist = qw(uptime pstat nfsstat df iostat vmstat);
+
+# We can't monitor netstat because of a bug in RedHat's netstat -i -c.
+# Bug ref: 86330 <robl@linx.net>
+
+$SENDMAIL = "sendmail" ;	# SET_THIS to location of your 'sendmail'
+#$SENDMAIL = "qmail-qread";	# SET_THIS if using qmail
+
+$HOSTMON_SERVICE = "hostmon" unless $HOSTMON_SERVICE ;
+$HOSTMON_PORT = 5355 unless $HOSTMON_PORT ;
+
+# add to include path for os specific modules. You must set this to
+# the installation directory of hostmon-osclients
+($dirname = $0) =~ s@/[^/]*$@@ ;
+push(@INC, $dirname, ".", "hostmon-osclients");		# SET_THIS
+
+# Add to the path. Typically sendmail is under /usr/lib/
+$ENV{'PATH'} .= ":/usr/ucb:/usr/bsd:/bin:/usr/bin:/sbin:/usr/sbin" ;
+$ENV{'PATH'} .= ":/etc:/usr/etc:/usr/lib:/lib:/slib:/usr/slib" ;
+
+#  The output data filename is "/tmp/<hostname>.hostmon"
+#  This must match the name used in the rcp from 'hostmon-collector'
+$datafile = "/tmp/" . `hostname` ;
+chomp $datafile;
+$datafile .= ".hostmon" ;
+$tmpfile = "$datafile" . ".tmp" ;	# temporary output file
+
+select (STDERR); $| = 1; select(STDOUT);	# make unbuffered
+
+#######################################################################
+#
+## Following couple of subroutines are the 'daemon' part of the client.
+#
+
+##
+##
+sub serve_telnet {
+  use Socket;
+
+  my @permitaddrs = ();
+
+  $datafile = '/etc/motd'  unless $datafile;
+  $debug && print STDERR "[telnet_daemon] (debug) datafile= $datafile\n";
+
+  ## Convert IP address of permitted hosts.
+  foreach my $host (@permithosts)
+  {
+    if ($host =~ /[\d\.]+/) {	# IP address, not name
+      my $paddr = inet_aton($host);
+      if ($paddr) { push (@permitaddrs, $paddr); }
+      else { print STDERR "[telnet_daemon] Invalid hostname/IP address $host\n"; }
+    }
+    else {
+      my ($name, $alias, $addr, $len, @paddrs) = gethostbyname($host);
+      if ($#paddrs < 0) {
+	print STDERR "[telnet_daemon] Cannot resolve $host, ignoring\n";
+      }
+      else { push (@permitaddrs, @paddrs); }
+    }
+  }
+
+  die "No hosts are permitted, permit list is empty" if ($#permitaddrs < 0);
+  if ($debug) {
+    foreach my $paddr (@permitaddrs) {
+      my $dottedquad = inet_ntoa($paddr);
+      print STDERR "[telnet_daemon] permitting ($dottedquad)\n";
+    }
+  }
+
+  ## Get a socket
+  if (! socket(SERVER, PF_INET, SOCK_STREAM, getprotobyname('tcp')) ) {
+    die "socket() call failed: $!";
+  }
+
+  ## so we can restart the server quickly
+  setsockopt(SERVER, SOL_SOCKET, SO_REUSEADDR, 1);
+  select( (select(SERVER), $| = 1)[0] ) if $debug ;	# unbuffered
+
+  ## Get port number
+  my $port = getservbyname($HOSTMON_SERVICE, 'tcp');
+  $port = $HOSTMON_PORT  if ((! $port) || $port !~ /^\d+$/);
+  $debug && print STDERR "[telnet_daemon] Port= $port\n" ;
+
+  my $myaddr = sockaddr_in($port, INADDR_ANY);
+    
+  ## Now bind to the socket
+  bind (SERVER, $myaddr) || die "bind: $!";
+  listen (SERVER, 5) || die "listen: $!";
+  
+  ## Listen for connections forever.
+  while (1)
+  {				# forever
+    ## Check remote's address
+    my ($paddr, $remote);
+    my $permitted = 0;
+
+    ($debug > 1) && 
+      print STDERR "[telnet_daemon] Listening for connection\n";
+    
+    ($remote = accept(CLIENT, SERVER)) || die $!; # waits here for connection
+    
+    my ($remoteport, $remoteaddr) = sockaddr_in($remote); # packed ip addr
+    
+    foreach $paddr (@permitaddrs)  { # compare packed addresses
+      if ($paddr eq $remoteaddr) { # note 'eq' for string cmp
+	$permitted = 1;
+	last;
+      }
+    }
+
+    my $remoteip = inet_ntoa($remoteaddr);	# dotted quad notation
+    
+    if (! $permitted)  {
+      print STDERR "[telnet_daemon] rejecting connection from $remoteip\n";
+      print CLIENT "Connection denied\n" if ($debug);
+      close (CLIENT);
+      next ;
+    }
+    $debug &&
+      print STDERR "[telnet_daemon] allowing connection from $remoteip\n";
+    
+    # while (<CLIENT>) { print STDERR " (client) $_"; } # to read from remote
+    
+    if (open (IFILE, $datafile)) {
+      while (<IFILE>) {
+	print CLIENT $_ ;
+      }
+      close (IFILE) ;
+    }
+    close (CLIENT);
+  }	# end: forever
+
+  ## not reached ##
+
+}	# sub serve_telnet()
+
+
+## Fork and create a telnet daemon that listens on port HOSTMON_PORT
+#  Fork twice, and then exit so that the parent is the init process
+#  since we dont want any orphans.
+#
+sub create_telnet_daemon {
+  my $ppid = $$;
+  if (($childpid=fork)) {	# in parent
+    print STDERR "($$) forked telnet_daemon pid $childpid\n" if ($debug);
+    return 1;
+  }
+  # here is the child process
+  $0 = "$0 (telnet_daemon parent=$ppid)" ;	# change process name
+  foreach ('CHLD', 'TERM', 'HUP', 'KILL', 'QUIT') { $SIG{$_} = 'DEFAULT'; }
+  serve_telnet() ;		# never returns
+  die "$0 FATAL serve_telnet() should not have returned";
+}	# end: create_telnet_daemon()
+
+
+
+####################################################################
+## Following routines are not doing any 'tests'. They are utility ##
+## routines.                                                      ##
+####################################################################
+
+##
+# Define a boolean variable for testing OS types easily in the above
+# routines. Also set the $osfile variable
+sub osinit {
+  my $ostype= `uname -s -r -m` ; chomp $ostype; # OS, revision, arch
+  $osfile = "hostmon-client.";
+  
+  # set boolean values for OS's
+  if    ($ostype =~ /AIX/)		{$osfile .= "aix";}
+  elsif ($ostype =~ /FreeBSD\s+2\.[2345]+/)	{$osfile .= "freebsd";}
+  elsif ($ostype =~ /FreeBSD\s+[34]+/)	{$osfile .= "freebsd"; }
+  elsif ($ostype =~ /FreeBSD/)	{$osfile .= "bsdi"; } # older versions
+  elsif ($ostype =~ /BSDI/)		{$osfile .= "bsdi"; }
+  elsif ($ostype =~ /BSD\/OS/)	{$osfile .= "bsdi"; }
+  elsif ($ostype =~ /NetBSD/)		{$osfile .= "bsdi"; }
+  elsif ($ostype =~ /SunOS\s+4/)	{$osfile .= "sunos4";}
+  elsif ($ostype =~ /SunOS\s+5/)	{$osfile .= "solaris2";}
+  elsif ($ostype =~ /OSF1/)		{$osfile .= "osf1";}
+  elsif ($ostype =~ /ULTRIX/)		{$osfile .= "ultrix";}
+  elsif ($ostype =~ /Linux/)		{$osfile .= "linux";}
+  elsif ($ostype =~ /HP-UX/)		{$osfile .= "hpux";}
+  elsif ($ostype =~ /IRIX\ 4/)	{$osfile .= "irix4";}
+  elsif ($ostype =~ /IRIX\ 5/)	{$osfile .= "irix5";}
+  elsif ($ostype =~ /IRIX(64)?\ 6/)	{$osfile .= "irix6";}
+  else  {print STDERR "hostmon-client:FATAL, OS $ostype is unknown\n"; die;}
+  #$debug && 
+  print STDERR "OSTYPE : $ostype\nLoading File : $osfile\n" if ($debug);
+  
+  ## force units to 1024 blocks for df and vmstat for SVR4
+  # $ENV{'BLOCKSIZE'} = "1024";
+  
+  #if ($ostype =~ /SunOS\s+5/) { $PSCMD = "/bin/ps -p"; }
+  unless ($PSCMD) {
+    $PSCMD = "/bin/ps";	# ps command to allow pid on cmd line. Autoset below
+    my $status = grep(/usage/i, `$PSCMD 1 2>&1`);
+    if ($status == 1) { $PSCMD = "/bin/ps -f -p" ;}
+  }
+}
+
+sub standalone {
+  my $me = $0;
+  $me =~ s|^.*/||;
+  $pidfile = "/tmp/$me.pid";
+
+  if(open(PID,"< $pidfile"))
+  {
+    my $pid = <PID>; chomp $pid ; close(PID);
+    if ($pid =~ /^\d+$/)
+    {
+      kill 15, $pid;
+      sleep 2;
+      if (kill 0 => $pid) { die "Could not kill earlier process pid $pid"; }
+    }
+  }	# end: open(PID...)
+  
+  open(PID, "> $pidfile") ||die "standalone: cannot create $pidfile, $!\n";
+  print PID "$$\n"; close(PID);
+  
+  foreach ('TERM','HUP','INT','KILL','QUIT') { $SIG{$_} = \&clean_out_onexit; }
+  $SIG{CHLD} = \&reaper;
+  
+}	# sub standalone()
+
+## Called when we get a SIGCHLD. Note that we have to handle the case
+#  of external programs called (such as `df`) also exiting and sending
+#  a SIGCHLD.
+sub reaper {
+  my $child;
+
+  while ( ($child = waitpid(-1, &WNOHANG)) > 0 ) {
+    # print STDERR "($$) Child $child exited\n" if ($debug);
+    $childpid = 0 if ($child == $childpid);
+  }
+  $SIG{CHLD} = \&reaper;		# reinstate handler
+  clean_out_onexit()   if (! $childpid);	# only if forked telnet dies
+}
+
+## Die on getting a terminate signal. Clean up data files.
+##
+sub clean_out_onexit {
+  my ($err) = @_;
+
+  $SIG{CHLD} = 'IGNORE';	# avoid looping between reaper and this func
+  if ($childpid) {		# kill the telnet_daemon
+    print STDERR "($$) killing telnet_daemon ($childpid)\n";
+    kill 15, $childpid ; sleep 1; kill 9, $childpid;
+    $childpid = 0;
+  }
+  unlink ($datafile, $tmpfile, $pidfile);
+
+  if ($err) { die "($$) $err"; }
+  else { die "($$) Terminating on signal\n"; }
+}	# clean_out_onexit()
+
+
+
+sub ntppeerstat {
+
+#
+# Uses ntptrace to list NTP peers that we care about and alarm about
+# NTP peer clock drift.
+#
+  my $cmd = "$NTPQ";
+  my $statuscode = undef;
+
+  open(CMD, "$cmd -p|")   || return (0); # dont exit if cmd not found
+
+  while (<CMD>) {
+
+  chomp;
+
+  $debug && print STDERR "(debug)ntppeerstat: $_" ;
+
+  next if $_ =~ /^\ .*/;
+  next if $_ =~ /^\=\=.*/;
+
+  my ($remote,$refid,$st,$t,$when,$poll,$reach,$delay,$offset,$jitter) = split(/\ +/);
+
+  my ($status) = substr($remote,0,1);
+  my ($server) = substr($remote,1);
+
+  $debug && print STDERR "(debug)ntppeerstat: parsed:$status:$server,$refid,$st,$t,$when,$poll,$reach,$delay,$offset,$jitter\n";
+
+    $offset =~ s/\-//;
+    $offset = int($offset);
+
+    foreach $peer (@ntphosts) {
+         if ($peer eq $server) {
+          #  set some status codes we can monitor with SNIPS and RRD etc:
+          # "Good" for differing values of "good":
+          $statuscode = "10" if ($status eq '*');   # (peer) good and used status = "*"
+          $statuscode = "9"  if ($status eq '+');   # (candidate) good but not tracked = "+"
+          $statuscode = "8"  if ($status eq ".");   # (excess)
+          $statuscode = "7"  if ($status eq "#");   # (selected) but not among the first six peers sorted by synchronization distance
+          $statuscode = "6"  if ($status eq '-');   # (outlyer) not so good = "-"
+
+          # alarm on these:
+          $statuscode = "2"  if ($status eq 'x');   # (falsetick) false ticker - something wrong = "x"!
+          $statuscode = "0"  if ($status eq ' ');   # (reject) peer discarded. unreachable or outrageous!
+
+          print "$server-Offset $offset msec NTPoffset\n";
+          print "$server-State $statuscode state NTPstate\n";
+
+          } #if
+
+   } #foreach $peer
+
+ } #while CMD
+ close (CMD);
+
+} # sub
+
+##
+##	mailstat
+#  Show total local mail queue length and top 5 'down' hosts
+#  Uses sendmail or qmail
+sub mailstat
+{
+  my $qsize = 0;
+  my $junk;
+  my %NTo;
+  my $cmd = "$SENDMAIL";
+
+  undef %NTo;
+  if ($cmd =~ /sendmail/) { $cmd .= " -bp"; }
+  
+  #open(STDERR, ">&STDOUT")		|| die "Can't dup stdout";
+  open(CMD, "$cmd |")	|| return (0); # dont exit if cmd not found
+  
+  # qmail code by  thomas.erskine-dated-7c0d9090a295911d@crc.ca
+  if ($cmd =~ /qmail/)
+  {
+    my ($tolocal, $toremote) = (0, 0);
+    my $addr;
+    while (<CMD>) {
+      $debug && print STDERR "(debug)mailstat: $_" ;
+      if (/^\S/) { ++$qsize; }
+      else {
+	chomp;
+	if (/(local|remote)\s+(\S+)/) {
+	  if ($1 eq 'local') { $tolocal++; }
+	  elsif ($1 eq 'remote') { $toremote++; }
+	  $addr = $2;
+	}
+	else { next; }		# shouldn't happen, but let's not die
+	my ($user, $host) = split(/[@]/,$addr);
+	$host =~ y/A-Z/a-z/; 	# canonicalize lower
+	$host =~ tr/<>//d;	# watch angle brackets
+	$host =~ s/\s*\(.*$//;	# strip off comments
+	$NTo{$host} += 1;
+      }
+    }
+    print "MailQ2Local $tolocal Addrs\n"; # unique to qmail
+    print "MailQ2Remote $toremote Addrs\n";
+    print "MailQLocal $qsize Length\n";
+    
+  }	# if qmail
+  else	# sendmail
+  {
+    while (<CMD>) {
+      $debug && print STDERR "(debug)mailstat: $_" ;
+      next if (/^[A-Z]+\d+\s+/); # From: this 
+      next if (/deferred|warning|timeout/i);
+      if (/Mail Queue/) {	# Mail Queue (152 requests)
+	($junk, $junk, $junk, $qsize) = split(/[ \(]/);
+      } elsif (/[@]/) {
+	chomp;
+	my ($user, $host) = split(/[@]/);
+	$host =~ y/A-Z/a-z/; 	# canonicalize lower
+	$host =~ s/>//g;	# watch angle brackets
+	$host =~ s/^\s*//;	# remove leading whitespace
+	$NTo{$host} += 1;
+      }
+    }
+    print "MailQLocal $qsize Length\n";
+  }				# if sendmail
+  close (CMD);
+  
+  # to sort the associative array by queue length
+  my (@hosts) = keys %NTo;
+  @hosts = sort { $NTo{$b} <=> $NTo{$a} } @hosts; # high values at top
+  
+  if (@hosts != 0) {
+    for (@hosts[0..4]) {	# printing only top 5 hosts
+      if ($_) { printf "MailQDest %d Length %s\n", $NTo{$_}, $_ ; }
+    }
+  }
+  else				# blank out the previous list
+  {
+    printf "MailQDest %d Length %s\n", 0, "";
+  }
+}
+
+###
+### main
+###    
+
+print STDERR "(debug) MonitorList= @monitorlist\n", 
+  "(debug) Outputfile= $datafile\n" if ($debug);
+
+&osinit;			# OS specific initialization
+require $osfile;                # include OS specific file
+-f "local" && require "local";	# any local site-specific special file
+
+&standalone ;			# create telnet_daemon before calling this ??
+&create_telnet_daemon;
+
+while (1)
+{
+  no strict 'refs';	 # allow using $function()
+  my $stime = time;
+
+  open (DFILE, "> $tmpfile") || clean_out_onexit("Cannot open $tmpfile, $!");
+  select(DFILE);		# select default output file
+
+  print "TIME $stime secs\n";	# needed in the output
+  local $SIG{CHLD} = 'DEFAULT';	# for external programs called
+  foreach my $s (@monitorlist) {
+    &$s() ;	# call the subroutines.
+  }
+  $SIG{CHLD} = \&reaper;	# reinstate handler
+  close (DFILE) ;
+  unlink $datafile;
+  rename ($tmpfile, $datafile);
+
+  my $deltatime = time - $stime;	# time to do tests
+  $debug  && print STDERR "(dbg) sleep for= $sleeptime - $deltatime\n";
+
+  sleep($sleeptime - $deltatime)   if ($sleeptime > $deltatime);
+
+}	# end while(1)
+
+END {   kill 15, $childpid if ($childpid);  }

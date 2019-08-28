@@ -1,0 +1,29 @@
+# $Id: Makefile.mid,v 1.0 2001/07/08 22:44:25 vikas Exp $
+#
+# Makefile for 'ntpmon'
+#
+
+# Might need to link with 'libresolv' on some systems
+
+PROGCDEFS =
+PROGLIBS  =	# -lresolv
+
+TARG =	ntpmon
+OBJS =	main.o ntpmon.o
+INITFILES = ntpmon
+
+$(TARG): $(OBJS) Makefile
+	$(CC) $(CFLAGS) $(OBJS) $(LIBS) $(PROGLIBS) -o $@
+
+
+install: installdir $(TARG)
+	$(INSTALL) $(INSTALLFLAGS) -c -m 751 $(TARG) $(BINDIR)/
+
+clean:
+	rm -f $(DIRT)
+
+rcs:
+	@echo "Doing 'rcs' in `pwd`"
+	@-for i in $(OBJS); do \
+		$(CO) -q `basename $$i .o`.c ;\
+	  done

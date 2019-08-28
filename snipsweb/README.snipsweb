@@ -1,0 +1,47 @@
+The web interface for SNIPS has the following components:
+---------------------------------------------------------
+
+Search and edit SET_THIS variables in snipsweb-confg
+
+genweb.cgi  -	Run from crontab, creates HTML files for Critical,
+		Error, Warning and Info levels. These HTML files
+		contain references to snipsweb.cgi.
+		This file can also be installed as a CGI to generate
+		HTML pages directly and allow sorting, filtering.
+		Use htaccess web user authentication if installing
+		as a CGI.
+
+snipsweb.cgi -	CGI script invoked when someone clicks on a
+		devicename. Displays a device specific operational
+		menu (troubleshoot, help, status). Use htaccess
+		user web authentication on this cgi.
+
+rrdgraph.cgi -	Reads the RRD data for a monitor and generates
+		the historical graphs for the device.
+
+
+genweb-filter.cgi - Generates a Web form for setting filter options
+		to genweb.cgi
+
+
+
+The various files used by 'snipsweb' programs are:
+--------------------------------------------------
+
+snipsweb-confg - Under $ETCDIR/. Contains all configurable parameters
+		for all the snipsweb  CGI and perl scripts.
+
+updates -	Under $ETCDIR/. Writable by 'httpd' process, and
+		contains 'notes' on devices that are displayed
+		on the web page
+
+cookiefile -	Under $ETCDIR/ and writable by 'httpd' process.
+		Used only if not using the .htaccess method of
+		authentication.
+
+webusers -	Contains list of web users, passwords and their
+		privelege level.
+
+device-help/ -	Directory which contains device specific help files
+
+---

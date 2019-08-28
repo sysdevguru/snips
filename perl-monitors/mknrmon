@@ -1,0 +1,36 @@
+#!/usr/local/bin/perl
+# $Header: /home/cvsroot/snips/perl-monitors/mknrmon,v 1.0 2001/07/09 04:33:20 vikas Exp $
+#
+# Author:  Frank Crawford (frank@ansto.gov.au)  Jan 99
+#
+# mknrmon - take output of Cisco "show novell route" command and
+# create lines suitable for nrmon configuration file (for SNIPS).
+#
+# Sample execution command:
+#    rcisco  myrouter mypasswd 'show novell route'  | mknrmon
+#
+# Example lines (IOS 11.1):
+#    C          2 (ISL vLAN),      Fa2/0.44
+#    R          3 [02/01] via        1.0020.af1e.383c,    4s, Fd1/0
+#
+sub doline
+{
+    local ($nets, $interface, $nhop) ;# $ready has the line to process.
+    if($ready =~ /^[RC] (Net)?\s*([\dABCDEF]+) (((in)?.*via\s+(\S+),)|(is)?).*,\s+((Ethernet|Serial|F.)[\d\.\/]+)$/)
+    {
+	$nets=$2;
+	$interface = $8;
+	$nhop=$6; $nhop=~tr/a-z/A-Z/; # set case-insensitive
+	$interface =~ s/Ethernet/e/ ;  $interface =~ s/Serial/s/ ;
+	$item="$nets\t$interface\t$nhop";
+
+	print STDOUT "$item\n";
+    }
+}
+
+
+while(<>) {
+  tr/\n\r//d;
+  $ready=$_;
+  &doline;
+}

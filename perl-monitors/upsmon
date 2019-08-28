@@ -1,0 +1,75 @@
+#!/usr/local/bin/perl -w
+#
+# $Header: /home/cvsroot/snips/perl-monitors/upsmon,v 1.0 2001/07/09 04:33:20 vikas Exp $
+#
+# A program to update stats related to a UPS.  It is designed to be
+# called from a separate monitoring script rather than it doing the
+# monitoring itself.
+# Unlike APCmon, this is designed to run out of some other script.
+# It is called to set various status's from within other scripts.
+# This keeps track of status via the status file.
+#
+# Written by: Frank Crawford - <frank@ansto.gov.au> Jan 1999
+#
+# Called as:
+#
+#	upsmon [0|1] [<Address>] [<Host>]
+# where:
+#	0|1		up (1) or down (0)
+#	<Address>	address field (e.g. "SOLA-51/900")
+#	<Host>		host field (default to local host)
+#
+# e.g.:
+#	/usr/local/snips/bin/upsmon 1 "SOLA-51/900"
+#
+#
+
+use strict;
+use vars qw ( $snipsroot $debug $varname $varunits $sender
+	      $datafd $datafile $host $address $status
+	      $event %event
+	    );
+
+BEGIN {
+  $snipsroot = "/usr/local/snips"  unless $snipsroot;	# SET_THIS
+  push (@INC, "$snipsroot/etc"); push (@INC, "$snipsroot/bin");
+  require "snipsperl.conf" ;		# local customizations
+}
+
+use SNIPS;
+
+##########
+$varname  = 'AC_Power';
+$varunits = 'Avail' ;
+$sender = 'upsmon';
+$debug = 0;				# set to 1 for debugging output
+
+$datafile = "$snipsroot/data/$sender-output";
+
+$status = shift(@ARGV) || 0;
+$address = shift(@ARGV) || '-';
+$host = shift(@ARGV);
+
+chop($host = `hostname -s`) unless $host;
+
+if (! -f $datafile) { $datafd = open_datafile($datafile, "w+"); }
+else { $datafd = open_datafile($datafile, "r+"); }
+
+while ( ($event = SNIPS::read_event($datafd)) ) {
+  %event = unpack_event($event);
+  last if ($event{device_name} eq $host  &&  $event{device_addr} eq $address);
+}
+
+if (defined $event) {
+  update_event($event, $status, $status, 0, $E_CRITICAL);
+  rewrite_event($datafd, $event);
+}
+else {
+  $event = new_event();
+  alter_event($event, $sender, $host, $address, undef, $varname, $varunits);
+  write_event($datafd, $event);
+}
+
+close_datafile($datafd);
+
+exit(0);

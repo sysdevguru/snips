@@ -1,0 +1,66 @@
+# bgpmon-confg - bgpmon master configuration
+#
+## Use this file with bgpmon v2.0 and above.
+#
+###
+#  - You define router types (objects).
+#  - Then, for each of your router, specify its type and login password.
+#  - Finally, define which routers you want to monitor and optionally, the
+#    peers and max severity based on the AS number.
+###
+#
+# Set a different polling interval - default 5 mins
+pollinterval 300
+
+## THIS SECTION DOES NOT REQUIRE EDITING NORMALLY
+# OBJECT DEFINITIONS - how to obtain and parse the bgp summary
+#
+# IMPORTANT NOTE: the version numbers linked with each object are the
+#                 versions of firmware that the configuration was
+#                 tested with.  It could very well work with other (especially
+#                 newer) versions of the firmware, and possibly older versions
+#                 as well.  YOU DO NOT NEED TO ADD A NEW CONFIGURATION FOR YOUR
+#                 FIRMWARE REVISION UNLESS NONE OF THE EXISTING ONES WORK.
+#
+#        TYPE             PORT ARYREF UPVAL             COMMAND SEQUENCE
+object  ASCEND_GRF_1.3.8  616  8,1,3  Established       %PASS%:sho bgp sum:exit
+object  ASCEND_GRF_1.3.11 616  10,1,3 Established       %PASS%:sho bgp sum:exit
+object  ASCEND_GRF_1.4.6  616  10,0,2 Established       %PASS%:sho bgp sum:exit
+object  CISCO_11.x        23   9,0,2  \d+             %PASS%:term len 0:sh ip bgp sum:exit
+object  BAY_1.27          23   4,0,2  Estab     %USER%:%PASS%:sho bgp peer:exit
+
+###  EDIT THIS FOLLOWING SECTIONS ###
+
+## ROUTER DEFINITIONS - used in conjunction with peer/router statements
+#
+#	    NAME	TYPE               IP ADDRESS     PASS      USER (opt)
+router_def  sfo-rtr	ASCEND_GRF_1.3.8   205.215.xx.xx  password	
+router_def  pdl-bay	BAY_1.27    	   205.215.xx.xx  password  netadmin
+router_def  bos-gw	CISCO_11.x	   205.215.xx.xx  password
+
+## ROUTERS TO MONITOR - will monitor all bgp peers/sessions on a router
+#
+#	NAME
+router	sfo-rtr
+router	pdl-bay
+
+## SINGLE PEERS TO MONITOR - will monitor only this peer on a router
+# NOTE: you can put a - for the peer name if you wish the name to be
+#       determined by DNS.
+#
+#	ROUTER NAME	PEER NAME 	PEER IP
+peer	bos-gw		-		198.32.xx.xx
+peer	bos-gw		mae-east	198.32.xx.xx
+
+## SEVERITY - defines severity levels based on AS number
+severity  DEFAULT  E_ERROR
+severity  4006     E_CRITICAL	# Netrail (very important)
+severity  3491     E_WARNING	# CAIS (so used to seeing it in alarm)
+
+## Assume all peers on a router are unchanged from their last known status in
+# the event that a router cannot be reached.  If you wish to assume that all
+# peers would be down in this event, use 'down' as an assumption
+#		assume <unchanged | down>
+ASSUME unchanged
+
+# EOF

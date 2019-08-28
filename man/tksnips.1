@@ -1,0 +1,77 @@
+.\" $Header: /home/cvsroot/snips/man/tksnips.1,v 1.0 2001/07/08 22:31:48 vikas Exp $
+.\"
+.TH tksnips 1 "June 2001"
+.SH NAME
+tksnips \- Tcl/Tk based gui interface to view SNIPS events.
+.\" --------------------------------------------
+.SH SYNOPSIS
+.B tkSnips
+[\-a] [\-b] [\-s] [\-x] 
+[\-dn | \-do | \-da]
+[\-li | \-lw | \-le | \-lc]
+[snips hostname]
+.LP
+Display SNIPS events using a Tcl/Tk based windows interface.
+This program needs
+.B tixwish
+in order to run.
+.\" --------------------------------------------
+.SH OPTIONS
+.TP
+.B \-a
+autosize window to display all events on a single page.
+.TP
+.B \-b
+Enable beep on change of status.
+.TP \-s
+Enable small font mode.
+.TP
+.B \-x
+Extended screen mode.
+.TP
+.BI \-d X
+where X is one of
+.B n
+to never display change window,
+.B o
+to only display the change window when iconified,
+.B a
+to always display the change window.
+.TP
+.BI \-l X
+sets the display level, where X is one of
+.B i
+to display Info and up,
+.B w
+to display Warning level events and up,
+.B e
+for Error level, and
+.B c
+for Critical level.
+.TP 10
+.I <snips hostname>
+is the name or IP address of the host running the
+.I ndaemon 
+socket server.
+.\" --------------------------------------------
+.SH DESCRIPTION
+.LP
+.B tKsnips
+is a Tcl/Tk based display agent for SNIPS events. It connects to the SNIPS
+host running the
+.I ndaemon
+process and displays the events returned by ndaemon.
+.LP
+It is an alternate to using snipstv or snipsweb.
+.SH SERVER PROCESS (ndaemon)
+The ndaemon process must be started on the SNIPS host in order to permit the
+tKsnips clients to connect to it.
+.SH CAVEATS
+There is no security built into the
+.B ndaemon
+process (which listens on port 5005), so anyone can connect to this daemon
+and list the status of all monitored devices.
+.SH AUTHOR
+.nf
+Lydia Leong (lwl@godlike.com)
+.fi

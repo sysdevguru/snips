@@ -1,0 +1,13 @@
+## Config for pm3dmmon (digital modem availability monitor)
+#
+# If the number of modems available equal or are less than the values here, the
+# severity will be escalated to the level the value indicates.
+#
+#
+## Name	Address  		Warning-#lines	Error-#lines	Critical-#lines
+##
+pm3-1	204.157.237.38		45		42		40
+pm3-2	204.157.237.39		45		42		40
+pm3-3	204.157.237.40		45		42		40
+pm3-4	204.157.237.98		45		42		40
+pm3-5	204.157.237.41		45		42		40

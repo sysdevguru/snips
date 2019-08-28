@@ -1,0 +1,32 @@
+.SH NAME
+snmptrapd - Receive and log snmp trap messages.
+.SH SYNOPSIS
+snmptrapd [ -P ]
+.SH DESCRIPTION
+Snmptrapd is an SNMP application that receives and logs snmp trap
+messages sent to the SNMP-TRAP port (162) on the local machine.
+.PP
+If the
+.B -P
+option is given,
+.I snmptrapd
+will print it's messages to the standard output.  Otherwise it will use
+.IR syslog (8)
+to log messages.  These syslog messages are sent with the level of
+LOG_WARNING, and are if available (usually on 4.3 systems) are sent to
+the LOG_LOCAL0 facility.
+.PP
+The log messages are of the form:
+.br
+.I Sep 17 22:39:52 suffern snmptrapd: 128.2.13.41:
+.I Cold Start Trap (0) Uptime:
+.I 8 days, 0:35:46
+.PP
+.I Snmptrapd
+must be run as root so that UDP port 162 can be opened.
+.PP
+Adding a "-d" to the argument list will cause the application to dump
+input and output packets.
+.PP
+.SH BUGS
+This does not handle SNMPv2 Inform requests

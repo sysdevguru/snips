@@ -1,0 +1,42 @@
+# $Id: Makefile.mid,v 1.0 2001/07/08 22:56:07 vikas Exp $
+#
+# Makefile for 'pingmon'
+#
+
+# Might need to link with 'libresolv' on some systems
+
+PROGCDEFS =
+PROGLIBS  =	# -lresolv
+
+## SET_THIS
+#  You can change the IPPING to the system based '/bin/ping' if needed.
+#  These can also be set in the config files.
+IPPING =	$(BINDIR)/multiping
+RPCPING =	$(BINDIR)/rpcping
+#IPV6PING =	"ipv6ping"
+#OSIPING	    =	"/usr/sunlink/bin/osiping"
+
+PROGCDEFS =	-DIPPING=\"$(IPPING)\"  -DRPCPING=\"$(RPCPING)\"
+
+TARG =	pingmon
+OBJS =	main.o pingmon.o
+INITFILES = ippingmon rpcpingmon
+
+$(TARG): $(OBJS) Makefile
+	$(CC) $(CFLAGS) $(OBJS) $(LIBS) $(PROGLIBS) -o $@
+
+install: installdir $(TARG)
+	$(INSTALL) $(INSTALLFLAGS) -c -m 751 $(TARG) $(BINDIR)/ ;
+	@[ -f $(BINDIR)/ippingmon ] && rm -f $(BINDIR)/ippingmon ; \
+	 ln -s $(BINDIR)/$(TARG) $(BINDIR)/ippingmon ;\
+	 [ -f $(BINDIR)/rpcpingmon ] && rm -f $(BINDIR)/rpcpingmon ; \
+	 ln -s $(BINDIR)/$(TARG) $(BINDIR)/rpcpingmon
+
+clean:
+	rm -f $(DIRT)
+
+rcs:
+	@echo "Doing 'rcs' in `pwd`"
+	@-for i in $(OBJS); do \
+		$(CO) -q `basename $$i .o`.c ;\
+	  done

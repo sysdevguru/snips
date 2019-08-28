@@ -1,0 +1,207 @@
+#!/usr/local/bin/perl
+#
+# $Header: /home/cvsroot/snips/perl-monitors/smbmon,v 1.0 2001/07/09 04:33:20 vikas Exp $
+#
+#	smbmon - perl snips SMB service monitor
+#
+# Programmer:	Frank Crawford, frank@ansto.gov.au,  Jan 9, 1999
+# 		Heavily based on novellmon.
+#
+#    smbmon queries a number of NBT servers using SAMBA and
+#    checks for the appearance of the services listed in its own
+#    configuration file and reports any that are missing.  Example:
+#
+#    Device        Address      Time   +-Variable-+ +-Value-+  Condition
+#    DINAH/files 192.164.10.4 09:58    SMB server        0    Critical
+#
+#    This line states that a workstation service for DINAH is not available.
+#
+# Files used:
+#
+#   nmblookup                   Samba program query status.
+#
+# Snips event elements used:
+#   sender                     "smbmon"
+#   device
+#    name                      the Server name and service.
+#    addr                      IP address of the server.
+#   var                       
+#    name                      "SMBserver"
+#    value                     1 means up, 0 means down
+#    units                     always "entry"
+#
+# Configuration file format:
+#    #<text>                                   Comment line.
+#    <servername> <address> <servicetype>,<servicetype>
+#						SMB service, name, address &
+#                                               numerical type.
+#
+# Sample configuration file:
+#    # smbmon configuration
+#    DINAH   192.164.10.4	00,20/U
+#    NTDOM   192.164.10.4	1c/G
+#
+##
+# Sending queries to 192.164.10.4
+# 192.164.10.4 dinah
+# Looking up status of 192.164.10.4
+# received 14 names
+# 	DINAH           <00> -         M <ACTIVE> 
+# 	DINAH           <20> -         M <ACTIVE> 
+# 	NTDOM           <00> - <GROUP> M <ACTIVE> 
+# 	NTDOM           <1c> - <GROUP> M <ACTIVE> 
+# 	NTDOM           <1b> -         M <ACTIVE> 
+# 	DINAH           <03> -         M <ACTIVE> 
+# 	NTDOM           <1e> - <GROUP> M <ACTIVE> 
+# 	NTDOM           <1d> -         M <ACTIVE> 
+# 	..__MSBROWSE__. <01> - <GROUP> M <ACTIVE> 
+# 	INet~Services   <1c> - <GROUP> M <ACTIVE> 
+# 	DINAH           <43> -         M <ACTIVE> 
+# 	IS~DINAH        <00> -         M <ACTIVE> 
+# 	DINAH           <6a> -         M <ACTIVE> 
+# 	DINAH           <be> -         M <ACTIVE> 
+# num_good_sends=0 num_good_receives=0
+## 
+##
+
+use strict;
+use vars qw ( $snipsroot $rcisco $debug %routers
+	      $rprog $rpasswd $rcommand $varname $varunits $maxseverity
+	      %tname %found @items
+	    );
+
+BEGIN {
+  $snipsroot = "/usr/local/snips"  unless $snipsroot;	# SET_THIS
+  push (@INC, "$snipsroot/etc"); push (@INC, "$snipsroot/bin");
+  require "snipsperl.conf" ;		# local customizations
+}
+
+use SNIPS;
+
+############################
+## Variables customization #
+############################
+$rprog="/usr/local/bin/nmblookup";	# Path for nmblookup
+				# Also check in &dotest for arguments
+$varname="SMB_server";		# Registered SMB Server
+$varunits="Entry" ;		# the var.units field in EVENT structure
+$s_pollinterval=60*5;		# Seconds to sleep between tries.
+$maxseverity = $E_ERROR ;	# max severity of events
+$debug = 0;			# set to 1 for debugging output
+############################
+
+-x $rprog || die("Could not find executable $rprog, exiting");
+
+# hash array of type numbers.
+%tname=("00/u", "WksSvc",
+	"00/g", "Domain",
+	"03/u", "MsgSvc",
+	"06/u", "RAS",
+	"1b/u", "DomMBwsr",
+	"1c/g", "DomCtrl",
+	"1d/u", "MBwsr",
+	"1f/u", "NetDDE",
+	"20/u", "FileSvc",
+	"23/u", "ExStore",
+	"24/u", "ExDir",
+	"87/u", "ExMTA",
+	"6a/u", "ExIMC",
+	);
+
+##
+# Read the config file. Use '\t' as a separator.
+#
+sub readconf {
+  my $event = new_event();
+  my $lineno = 0;
+  my $count = 0;
+
+  if ($debug == 0 && $libdebug > 0) {
+    $debug = $libdebug;
+    $libdebug = 1 if ($debug > 1) ;
+  }
+  $s_sender = 'smbmon' if ($s_sender eq "");
+
+  undef @items; %routers = ();
+  open(CONFIG,"<$s_configfile")||die("Couldn't find $s_configfile, exiting");
+  my $datafd = open_datafile($s_datafile, "w");
+  alter_event($event, $s_sender, undef, undef, undef, $varname, $varunits);
+
+  while(<CONFIG>) {
+    ++$lineno;
+    chomp;
+    if(/^\s*\#/) {next;}   # skip comments
+    if(/^\s*$/)  {next;}   # skip blank lines
+
+    if (/^\s*RRDTOOL\s+ON/i)  { $SNIPS::dorrd = 1; next; }
+    if (/^\s*RRDTOOL\s+OFF/i) { $SNIPS::dorrd = 0; next; }
+    if (/^(sleepinterval)\s+(\d+)\s*$/i || /^(pollinterval)\s+(\d+)\s*$/i) {
+      $s_pollinterval = $2;
+      next;
+    }
+    if (/^\s*(\S+)\s+(\S+)\s+(\S+)(\s.*)?$/) {
+      my ($name, $address, $type) = ($1, $2, $3);
+      $name =~ tr/a-z/A-Z/;
+      foreach (split(',', $type)) {
+	my $stype;
+	$_ = "0$_" unless /^[\da-f][\da-f]/i;
+	$_ .= '/u' unless m:/:;
+	tr/A-Z/a-z/;
+	$stype = $_;
+	push(@items, "$name\t$address\t$stype");  # starting index from 0
+	$stype = "$tname{$stype}" if (defined($tname{$stype}));
+	alter_event($event, undef, $name, $address, $stype, undef, undef);
+	write_event($datafd, $event);
+      }	# foreach
+      $routers{"$name\t$address"}++;
+    }	# if()
+  }	# while(CONFIG)
+  close(CONFIG);
+  if(0>$#items){die("Nothing to monitor in $s_configfile, exiting")};
+}
+
+
+## Check the current state of SMB servers
+#
+sub get_server_states {
+  my ($router, $address, $command);
+
+  foreach(@items) {$found{$_}=0;}
+
+  foreach (keys(%routers)) {
+    ($router, $address) = split(/\t/);
+    # You may want to read from a real config file
+    $command="$rprog -s /dev/null -B $address -S $router";
+    if ($debug) {print "(debug) dotest: running command $command\n" ;}
+    open(ROUTER,"$command|");
+
+    while(<ROUTER>) {
+      if(/^\s+(\S+)\s+<(..)> - (<GROUP>)?\s*\S( <[^>]+>)* <ACTIVE>/) {
+	my($name, $type, $item);
+	($name = $1) =~ tr/a-z/A-Z/;
+	$type = $2 . (($3) ? '/g' : '/u');
+	$type =~ tr/A-Z/a-z/;
+	$item="$name\t$address\t$type";
+	# ignore if not in config file
+	$found{$item}=1 if defined($found{$item});
+      }
+    }
+    close(ROUTER);
+  }
+}	# sub get_server_states()
+
+sub dotest {
+  my ($event, $i) = @_ ;	# $i starts from 1, not 0
+
+  &get_server_states() if ($i == 1);	# at start of cycle
+
+  my $item = $items[$i - 1];	# since @items index starts from 0, not 1
+  # 	status, value, thres, maxseverity
+  return ($found{$item} > 0 ? 1 : 0, $found{$item}, 0, $maxseverity);
+}
+
+###
+### Main program:
+###
+
+&snips_main(\&readconf, undef, \&dotest);

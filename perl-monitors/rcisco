@@ -1,0 +1,96 @@
+#!/usr/local/bin/perl
+#
+# $Header: /home/cvsroot/snips/perl-monitors/rcisco,v 1.0 2001/07/09 04:37:15 vikas Exp $
+#
+###
+### Telnet to a remote Cisco router and execute a command.
+###
+# AUTHOR:
+#	Originally written by Christopher Sedore and John Wobus
+#	(jmwobus@mailbox.syr.edu) (1993)
+#	Currently maintained by Vikas Aggarwal (vikas@navya.com)
+#
+# Usage:
+#	rcisco <router-name or ip> <passwd> <command>
+#
+#  You can put a default router password in this file and then supply a
+#  blank field as the password on the command line.
+#	rcisco cisco-gw.abc.com  ''   'show hardware'
+###
+###
+
+use Socket;
+
+my ($rhost, $rpasswd, $rcmd) = @ARGV;
+
+$rhost = "cisco-gw.my.com" unless $rhost;
+$rpasswd = "default-cisco-passwd" unless $rpasswd;
+$rcmd = "show hardware" unless $rcmd;
+
+my ($rport) = 23;	# default telnet port
+
+##
+# Create a connected socket to the remote host.
+#	newSocket ("cisco-gw.abc.com", 23, 'tcp')
+# Dies on failure.
+sub newSocket {
+    my ($host, $port, $proto) = @_ ;
+
+    $proto = 'tcp' unless $proto;
+
+    if ($port =~ /\D/) {
+      $port = getservbyname($port, $proto);
+      if (! $port) {
+	print STDERR "No port for '$port' (no entry in /etc/services)\n";
+	return undef;
+      }
+    }
+    if ($proto =~ /tcp/) {
+      socket(SOCK, PF_INET, SOCK_STREAM, getprotobyname('tcp'));
+    } else { 
+      socket(SOCK, PF_INET, SOCK_DGRAM, getprotobyname('udp'));
+    }
+
+    if ($host =~ /^\d+/) {	# IP address, not name
+      $remote_addr = inet_aton($host);
+    }
+    else {
+      $remote_addr = gethostbyname($host);
+    }
+    die "Unknown host $host" if (! $remote_addr);
+
+    $paddr = sockaddr_in($port, $remote_addr);	# packed address
+    connect(SOCK, $paddr) || die "connect: $!";
+
+    return (SOCK);
+}
+
+sub cleanup {
+    kill (9, $child) if $child;
+}
+
+###
+### main
+###
+
+$SIG{'INT'} = 'cleanup';
+my ($sock) = &newSocket($rhost, $rport, 'tcp');
+select($sock); $| = 1;	# make socket unbuffered
+select(STDOUT);		# set back to standard file handle.
+
+# Now we fork and the child sends commands to the Cisco while the
+# parent reads and prints from the stdout.
+if ($child = fork) {
+    select $sock;
+    print "$rpasswd\n";
+    sleep 1;
+    print "terminal length 0\n";
+    print "$rcmd\n";
+    print "quit\n";
+    sleep 2;
+    exit 0;	# this will wait in zombie mode until parent exits.
+}
+# in the parent
+while (<$sock>) { print; }
+exit 0;
+

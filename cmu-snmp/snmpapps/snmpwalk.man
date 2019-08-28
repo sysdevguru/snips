@@ -1,0 +1,71 @@
+.SH NAME
+snmpwalk - communicates with a network entity using SNMP GET Next
+Requests.
+.SH SYNOPSIS
+snmpwalk [ -d ] [ -V ] [ -q ] [ -p Port ] [ -r retries ] [ -t timeout
+] [ -1 ] [ -2 ] host community [ variable-name ]
+.SH "DESCRIPTION"
+Snmpwalk is an SNMP application that uses GET NEXT Requests to query
+for a tree of information about a network entity.
+.PP
+The
+.I host
+specification may be either a host name or an internet address
+specified in "dot notation"
+.PP
+.I community
+is the community for the requests.
+.PP
+A variable may also be given on the command line.  This variable
+specifies which portion of the object identifier space will be
+searched using GET NEXT Requests.  All variables in the subtree below
+the given variable are queried and their values presented to the user.
+.PP
+If the "variable-name" argument is not present, snmpwalk will search
+MIB-2 (.1.3.6.1.2.1).
+.PP
+If the network entity has an error processing the request packet, an
+error packet will be returned and a message will be shown, helping to
+pinpoint why the request was malformed.
+.PP
+If the tree search causes attempts to search beyond the end of the
+MIB, a message will be displayed:
+.PP
+.I End of MIB.
+.PP
+Adding a "-d" to the argument list will cause the application to dump
+input and output packets.
+.PP
+The "-V" flag returns the version of the app, and the version of the
+SNMP library used.
+.PP
+The "-q" flag causes the output oids to all be full dotted notation,
+rather than the verbose translation done via the MIBFile.
+.PP
+The "-p" flag allows an alternate port to be used for SNMP
+transactions.
+.PP
+The "-r" flag sets the number of retries.  The default is 4.
+.PP
+The "-t" flag sets the timeout in microseconds.  The default is
+1000000.
+.PP
+The "-1" and "-2" flags set the SNMP version of the outgoing request.
+.SH EXAMPLES
+% snmpwalk snmp-example.net.cmu.edu public system
+.PP
+returns
+.PP
+.nf
+Name: mib2.system.sysDescr.0 -> DisplayString : Unix 4.3BSD
+Name: mib2.system.sysObjectID.0 -> Object Identifier : enterprises.3.1.1
+Name: mib2.system.sysUpTime.0 -> Timeticks : (85305426) 9 days, 20:57:34
+.PP
+% snmpwalk -s snmp-example.net.cmu.edu public system
+.PP
+returns
+.PP
+.nf
+Name: .1.3.6.1.2.1.1.1.0 -> DisplayString : Unix 4.3BSD
+Name: .1.3.6.1.2.1.1.2.0 -> Object Identifier : enterprises.3.1.1
+Name: .1.3.6.1.2.1.1.3.0 -> Timeticks : (85305426) 9 days, 20:57:34

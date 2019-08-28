@@ -1,0 +1,52 @@
+.SH NAME
+snmpgetnext - Communicates with a network entity using SNMP GETNEXT
+Requests.
+.SH SYNOPSIS
+snmpgetnext [ -d ] [ -V ] [ -v ] [ -p Port ] [ -r retries ] [ -t
+timeout ] [ -1 ] [ -2 ] host community object-identifier
+.SH "DESCRIPTION"
+.I snmpgetnext
+will send an SNMP GETNEXT request to a network entity.  The purpose of
+this request is to fetch the next item in the entity's MIB.
+.PP
+The
+.I host
+specification may be either a host name or an internet address
+specified in "dot notation"
+.PP
+If the network entity has an error processing the request packet, an
+error packet will be returned and a message will be shown, helping to
+pinpoint why the request was malformed.
+.PP
+If the tree search causes attempts to search beyond the end of the
+MIB, a message will be displayed:
+.PP
+.I End of MIB.
+.PP
+Adding a "-d" to the argument list will cause the application to dump
+input and output packets.
+.PP
+The "-V" flag returns the version of the app, and the version of the
+SNMP library used.
+.PP
+The "-v" flag causes 
+.I snmpgetnext
+to print more information about the responses received.
+.PP
+The "-p" flag allows you to specify a port to use for the SNMP
+requests.
+.PP
+The "-r" flag sets the number of retries.  The default is 4.
+.PP
+The "-t" flag sets the timeout in microseconds.  The default is
+1000000.
+.PP
+The "-1" and "-2" flags set the SNMP version of the outgoing request.
+.SH EXAMPLES
+% snmpgetnext snmp-example.net.cmu.edu public system.sysdescr system.sysUpTime
+.PP
+returns
+.PP
+Name: system.sysDescr.0 -> OCTET STRING- (ascii):       Unix 4.3BSD
+.br
+Name: system.sysUpTime.0 -> Timeticks: (529004457) 61 days, 5:27:24

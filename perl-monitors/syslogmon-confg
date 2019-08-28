@@ -1,0 +1,61 @@
+##$Header: /home/cvsroot/snips/perl-monitors/syslogmon-confg,v 0.1 2000/10/06 04:39:21 vikas Exp $
+# File:		syslogmon-confg
+# 	        Config file for syslogmon
+#
+## Regular expressions must NOT HAVE ANY '#' marks in it.
+## Log files should be after the keyword LOGFILES.
+#
+# Sample log message : 
+#    $1  $2 <--$3--> <--$4--> <------------- $5 ------------------------>
+#    Feb 11 17:40:22 freebird /kernel: probing for devices on the PCI bus:
+#    Feb 11 17:43:15 freebird /kernel: real memory  = 33554432 (32768K bytes)
+#    Feb 11 17:43:15 freebird /kernel: diskfull  /var/tmp/junk
+#
+# When recording an event, the variable name is taken as #1 and 
+# hostname($4) is matched against (#2).  You can specify a hostname using
+# regular expressions i.e. "solar.*".  Whatever is specified in the 
+# #4 field is matched against ($4) of log message and if it matches,
+# is stored in address field of DEVICE structure. It is displayed
+# under "Device" header in snipstv.  It the reg exp(#4) contains
+# some exp in "()" then only the exp within "()" is displayed and
+# stored.
+#
+# For e.g config line :
+# Diskerr		*		WARNING		diskfull\s*(/var\S*)
+#
+# will generate the following output :
+# Device      Address         Time  +-- Variable --+ +- Value-+  Condition 
+# ----------------------------------------------------------------------
+# freebird  /var/tmp/junk   17:17     Diskerr          0        Warning   
+#
+# if the log is :
+# Feb 11 17:43:15 freebird /kernel: diskfull  /var/tmp/junk
+#
+# The monitoring is done using two variables : "sleepint" and "expiretime".
+# "sleepint" is the polling interval for checking log files for new data.
+# "expiretime" is used to remove old events from SNIPS datafile.  An event
+# expires if the current time is greater than event log time + expire time.
+# 
+# NOTE : These variables are defined in syslogmon file.
+#
+# EDIT THESE VARIABLES TO SUIT YOUR SYSTEM
+# SEVERITY LEVEL IS NOT ESCALATED GRADUALLY.  IT IS DIRECTLY ESCALATED
+# TO GIVEN LEVEL.
+
+RRDTOOL OFF
+
+#Varname(#1) 	Hostname(#2)	Severity(#3)	PERL Regular Exp(#4)
+####################################################################
+
+MemParity	*		critical	Parity Error
+Diskerr		*		critical	diskfull\s*(/var\S*)
+Diskerr		*		warning		\s*\S+\s+(\S+\s+hard error)\s*
+SwitchUser	*		info		su:\s+(\S+\s+\S+\s+\S+)\s+
+
+
+############## START of LOGFILEs LIST ###############
+LOGFILES
+
+/var/log/messages
+/var/log/mailog
+

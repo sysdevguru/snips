@@ -1,0 +1,4 @@
+hostmon         5355/tcp                # hostmon with TCP
+hostmon         5355/udp                # hostmon with UDP
+hostmon_tcp     5355/tcp                # fix for silly xinetd
+hostmon_udp     5355/udp                # fix for silly xinetd

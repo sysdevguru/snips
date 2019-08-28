@@ -1,0 +1,72 @@
+Release Notes, Version 1.4
+September 19, 1998
+Ryan Troll <ryan@andrew.cmu.edu>
+
+Major Changes:
+
+Fixed configure.in, to support finding cmu snmp library on machine in
+which the static versions were NOT installed.
+
+
+----------------------------------------------------------------------
+
+Release Notes, Version 1.3
+August 13, 1998
+Ryan Troll <ryan@andrew.cmu.edu>
+
+Major Changes:
+
+Fixed snmptrapd syslogging.
+
+Added ability to allow snmptrapd to log the enterprise string in
+incoming SNMPv1 traps.
+
+Now uses libtool to add the runpath to the (possibly shared) SNMP
+library.
+
+Cleaned up the distribution, removing files that were causing problems
+on some platforms.
+
+Removed ^M's from the install script, which were causing it to fail
+under some OS's.
+
+Added test for <sys/select.h>, to aid in compilation under AIX.
+Contributed by "Ravi Madhav K. Adatrao" <ravia@dd254.comm.mot.com>.
+
+----------------------------------------------------------------------
+
+Release Notes, Version 1.2
+May 8, 1998
+Ryan Troll <ryan@andrew.cmu.edu>
+
+Major Changes:
+
+* Cleaned up arguments and documentation. 
+
+* Added arguments for setting the default timeout and number of
+  retries.
+
+* Added arguments to set the outgoing request to SNMPv1 or SNMPv2.
+
+* configure script no longer forces use of static SNMP library, in
+  preparation for possible shared library.
+
+* Manpage generation changed, so that default distribution will now
+  contain a set of manpages, for sites that can't generate their own.
+
+Incorporated patch from Dave Plonka <plonka@doit.wisc.edu> to help
+with buffering output in snmptrapd.
+
+----------------------------------------------------------------------
+
+Release Notes, Version 1.1
+February 24th, 1998
+Ryan Troll <ryan@andrew.cmu.edu>
+
+Major Changes:
+
+Portability / Bug Fixes
+#######################
+
+Added Win32 environment.
+

@@ -1,0 +1,116 @@
+dnl autoconf  input file for SNIPS (http://www.navya.com)
+dnl
+dnl $Header: /home/cvsroot/snips/autoconf/configure.in,v 0.2 2001/09/22 14:35:19 vikas Exp $
+dnl
+dnl Process this file with autoconf to produce a configure script.
+dnl
+dnl	aclocal
+dnl	mv aclocal.m4 autoconf/
+dnl	autoconf -l autoconf  # name of dir where aclocal.m4 lives
+dnl
+dnl -------------------------------------------------------
+AC_INIT(include/snips.h)
+
+dnl Store all the configure related scripts in a separate subdirectory
+AC_CONFIG_AUX_DIR(autoconf)
+
+dnl determine the type of system we are running on
+AC_CANONICAL_SYSTEM
+
+AM_INIT_AUTOMAKE(snips, 1.0)
+AC_SUBST(VERSION)
+
+dnl Our default installation path (overriden using --prefix)
+AC_PREFIX_DEFAULT(/usr/local/snips)
+
+dnl Tell automake the location of our config header
+AM_CONFIG_HEADER(autoconf/config.h)
+
+dnl Define library subdirectory names here.
+CURSESLIB=curses
+
+dnl substitute them in all the files listed in AC_OUTPUT
+AC_SUBST(CURSESLIB)
+
+dnl -------------------------------------------------------
+
+dnl Checks for programs.
+AC_PROG_CXX
+AC_PROG_CC
+AC_PROG_CPP
+AC_PROG_INSTALL
+AC_PROG_LN_S
+AC_PROG_MAKE_SET
+AC_PROG_RANLIB
+AC_PROG_YACC
+
+dnl Check for location of Perl.
+AC_PATH_PROG(PERL, perl, /usr/local/bin/perl)
+AC_SUBST(PERL)
+
+dnl Check for location of PING
+AC_PATH_PROG(PING, ping, $(prefix)/bin/multiping)
+AC_SUBST(PING)
+
+dnl Checks for libraries.
+dnl Replace `main' with a function in -lg:
+AC_CHECK_LIB(g, main)
+dnl Replace `main' with a function in -lgdbm:
+AC_CHECK_LIB(gdbm, main)
+dnl Replace `main' with a function in -liodbc:
+AC_CHECK_LIB(iodbc, main)
+dnl Replace `main' with a function in -lncurses:
+AC_CHECK_LIB(ncurses, main)
+dnl Replace `main' with a function in -lresolv:
+AC_CHECK_LIB(resolv, main)
+dnl Replace `main' with a function in -lrrd:
+AC_CHECK_LIB(rrd, main)
+dnl Replace `main' with a function in -lsnips:
+AC_CHECK_LIB(snips, main)
+dnl Replace `main' with a function in -lsnmp:
+AC_CHECK_LIB(snmp, main)
+
+dnl Checks for header files.
+AC_HEADER_DIRENT
+AC_HEADER_STDC
+AC_HEADER_SYS_WAIT
+AC_CHECK_HEADERS(fcntl.h limits.h malloc.h ncurses.h \
+			strings.h sys/file.h sys/ioctl.h sys/time.h \
+			syslog.h unistd.h)
+
+dnl Checks for typedefs, structures, and compiler characteristics.
+AC_C_CONST
+AC_TYPE_OFF_T
+AC_TYPE_PID_T
+AC_TYPE_SIZE_T
+AC_HEADER_TIME
+AC_STRUCT_TM
+
+dnl Checks for library functions.
+AC_PROG_GCC_TRADITIONAL
+AC_FUNC_MEMCMP
+AC_TYPE_SIGNAL
+AC_FUNC_VPRINTF
+AC_FUNC_WAIT3
+AC_CHECK_FUNCS(gethostname gettimeofday mkdir mktime putenv select socket strdup strerror strstr strtod strtol strtoul)
+
+AC_OUTPUT(Makefile				\
+	etherload/Makefile			\
+	lib/Makefile				\
+	man/Makefile				\
+	nsmon/Makefile				\
+	ntpmon/Makefile				\
+	perl-monitors/Makefile			\
+	pingmon/Makefile			\
+	pingmon/multiping/Makefile		\
+	pingmon/rpcping/Makefile		\
+	portmon/Makefile			\
+	radiusmon/Makefile			\
+	snipslog/Makefile			\
+	snipstv/Makefile			\
+	snipsweb/Makefile			\
+	tksnips/Makefile			\
+	tpmon/Makefile				\
+	trapmon/Makefile			\
+	utility/Makefile			\
+	)

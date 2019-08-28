@@ -1,0 +1,55 @@
+## Config for snmpgeneric2
+#
+#  Ed Landa  (elanda@comstar.net)  May 1999
+#
+
+# To enable RRDtool data collection
+
+RRDTOOL  ON
+
+###
+# HOST[/1] IP[:PORT] SNMP-OID VARNAME COMMUNITY WARN ERROR CRITICAL [COMP]
+#
+# /1 after host name uses SNMPv1 instead of SNMPv2.
+#
+# If OID starts with a plus, then we will walk that OID and add up values that
+# are returned from the COMP evalution.
+#
+# COMP must not have any spaces in it.  Otherwise it is a standard PERL
+# expression the result of which is added to the total to compare against
+# the threshold.  The character '*' is replaced with the current value coming
+# off the tree we are walking.
+#
+####
+
+# SNMPv1 Patton VoIP Gateway:
+
+voip-isdn.se1/1	192.168.233.133	.1.3.6.1.4.1.1768.100.70.40.2.1.2.2	Calls		public	3	4	5	-
+voip-isdn.se1/1	192.168.233.133	.1.3.6.1.2.1.2.2.1.8.1 		  	ISDN_BRI0	public	2	2	2	-
+voip-isdn.se1/1	192.168.233.133	.1.3.6.1.2.1.2.2.1.8.2		  	ISDN_BRI1	public	2	2	2	-
+
+# Linux host running snmpd:
+
+cyan		192.168.232.50	.1.3.6.1.2.1.25.1.6.0		procs		Thesecret	300	400	500	-
+cyan		192.168.232.50	.1.3.6.1.4.1.2021.10.1.5.1	Load1		Thesecret	6	7	8	load100
+cyan		192.168.232.50	.1.3.6.1.4.1.2021.10.1.5.2	Load5		Thesecret	4	5	6	load100
+cyan		192.168.232.50	.1.3.6.1.4.1.2021.10.1.5.3	Load15		Thesecret	4	5	6	load100
+# Disks need to be configured in the target's snmpd.conf, for example: "disk  /home  20%"
+cyan		192.168.232.50	.1.3.6.1.4.1.2021.9.1.9.1	%Used_root	Thesecret	77	85	90	-
+cyan		192.168.232.50	.1.3.6.1.4.1.2021.9.1.9.2	%Used_usr	Thesecret	77	85	90	-
+cyan		192.168.232.50	.1.3.6.1.4.1.2021.9.1.9.3	%Used_var	Thesecret	77	85	90	-
+cyan		192.168.232.50	.1.3.6.1.4.1.2021.9.1.9.4	%Used_opt	Thesecret	77	85	90	-
+cyan		192.168.232.50	.1.3.6.1.4.1.2021.9.1.9.5	%Used_tmp	Thesecret	77	85	90	-
+cyan		192.168.232.50	.1.3.6.1.4.1.2021.9.1.9.12	%Used_home	Thesecret	77	85	90	-
+# Procs need to be configured in the target's snmpd.conf, for example: "proc  sshd 0 1"
+# 'pcc' is an extra flag  to allow snmpgeneric to monitor something which is only "1 or 0"
+cyan		192.168.232.50	.1.3.6.1.4.1.2021.2.1.5.1	proc_apache2	Thesecret	1	1	0	pcc
+cyan		192.168.232.50	.1.3.6.1.4.1.2021.2.1.5.2	proc_ntpd	Thesecret	1	1	0	pcc
+cyan		192.168.232.50	.1.3.6.1.4.1.2021.2.1.5.3	proc_sshd	Thesecret	1	1	0	pcc
+cyan		192.168.232.50	.1.3.6.1.4.1.2021.2.1.5.5	proc_syslog-ng	Thesecret	1	1	0	pcc
+# bool:var means that 1 is incremented to 2 so things that only have two states
+# can be matched against three thresholds. i.e the 'normal' state is 0, but when it increases
+# to 'abnormal' 1, we increment to 2 so that it goes straight to Critical:
+# (so in reality this should be "0  0  1" but this doesn't work correctly)
+cyan		192.168.232.50	.1.3.6.1.4.1.5000.300.1		CCISS_Array	Thesecret	1	1	2	bool:state
+

@@ -1,0 +1,31 @@
+## Config file for SQLmon snips monitor
+#
+# Format:
+#  POLLINTERVAL  600   (only the last one takes effect)
+#  <name> <addr>  <maxseverity> <DBI driver> <username> <password> <SQL query>
+#
+# The first two fields are the standard devicename and deviceaddr that snips
+# wants. The third is the maximum severity that the device will rise to. The
+# third is the dbi driver string. The above works for mysql; others may be
+# different. Note that you have to include the hostname here--the script
+# doesn't try to pull it from field 1 or 2. Next two are the username and
+# password to access the database. Everything from there on is the sql query
+# to execute. If the query is successful it uses the return value in the
+# "value" field. If not it sets that to 0 and bumps the severity. The above
+# query--in case you're not dbi proficient--is selecting everything in the
+# user table of the mysql database.
+#
+## 
+POLLINTERVAL  120
+
+# To enable RRDtool data collection
+RRDTOOL  ON
+
+## host  addr  maxseverity   DBI-driver   username   passwd  SQL-query ##
+#
+sql1  130.133.99.72 Critical dbi:mysql:mysql:localhost snips xxyy select * from user
+sql2  130.133.99.73 Error    dbi:mysql:mysql:sql2      snips xxyy select * from user
+
+
+#The script will die if either the username/password doesn't work or if your
+#SQL is invalid.

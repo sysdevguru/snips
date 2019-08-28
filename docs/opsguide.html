@@ -1,0 +1,646 @@
+<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML//EN">
+<!-- $Header: /home/cvsroot/snips/docs/opsguide.html,v 0.1 2001/07/17 02:18:52 vikas Exp $ -->
+<html>
+
+<head>
+<title>SNIPS Operations Guide</title>
+<style>
+<!--
+BODY {
+        background-color : White;
+        font-family : Verdana, Arial, Helvetica, sans-serif;
+		 font-size : 10pt;
+        list-style : square;
+        margin-left : 75px;
+        margin-right : 15px;
+        margin-top : 10px;
+}
+H1 {
+        font-family : Arial, Helvetica, sans-serif;
+        font-size : 18pt;
+        font-weight : bold;
+        margin-left: -25px;
+}
+H2 {
+        font-family : Arial, Helvetica, sans-serif;
+        font-size : 14pt;
+        font-variant : small-caps;
+        font-weight : bold;
+		 margin-left: -30px;
+}
+H3 {
+        font-family : Arial, Helvetica, sans-serif;
+        font-size : 12pt;
+        font-weight : bold;
+        margin-left: -25px;
+	    background-color : Silver;
+}
+H4 {
+        font-family : Book Antiqua, Times New Roman, serif;
+        font-size : 12pt;
+        font-weight : bold;
+        margin-left: -25px;
+}
+TABLE.small {
+	margin-left : -25px;
+	font-family : Arial, Helvetica, sans-serif;
+	TH {
+		font-size : small;
+		font-family : Arial, Helvetica, sans-serif;
+	}
+	TD {
+		font-size : small;
+		font-family : Arial, Helvetica, sans-serif;
+	}
+}
+A:Link {
+        text-decoration: none;
+        color: blue;
+}
+A:Hover {
+        text-decoration: underline;
+        color: red;
+}
+-->
+</style>
+</head>
+
+<body bgcolor="#ffffff">
+
+<h1 align="center">SNIPS Operations Guide</h1>
+
+<p align="center">Version 1.0<br>
+Last Updated: Feb 2001 </p>
+
+<h4>CONTENTS</h4>
+
+<p><strong>1. <a href="#runningSnips">Running SNIPS</a></strong> 
+
+<ul>
+  <li>File locations</li>
+  <li>Configuration files</li>
+  <li>Starting the monitors</li>
+  <li>snipslogd</li>
+  <li>Routine Maintenance</li>
+</ul>
+
+<p><strong>2. <a href="#userInterfaces">User Interfaces</a></strong> 
+
+<ul>
+  <li>snipstv</li>
+  <li>webSnips</li>
+  <li>tkSnips</li>
+</ul>
+
+<p><strong>3. <a href="#notifications">Notifications &amp; Reports</a></strong> 
+
+<ul>
+  <li>SMS Paging</li>
+  <li>Email</li>
+  <li>Reports</li>
+</ul>
+
+<p><strong>4. <a href="#largenets">Configurations for Large Networks</a></strong> </p>
+
+<p><strong>5. <a href="#appendix">Appendix</a></strong> 
+
+<ul>
+  <li>Monitors</li>
+</ul>
+
+<hr noshade color="#808080" size="2" width="80%">
+
+<p style="background-color: rgb(255,255,0)" align="center">You must read the <a
+href="install.txt"><u>Installation</u></a> document prior to reading this Operations
+guide. </p>
+
+<h3>1.&nbsp; <a name="runningSnips">Running SNIPS</a></h3>
+
+<h4>File Locations</h4>
+
+<p>The main directory where snips gets installed is specified at compile time (default is
+set to /usr/local/snips). The following sub-directories exist under this main directory:</p>
+
+<blockquote>
+  <table class="small" border="0" cellspacing="0" width="80%">
+    <tr>
+      <td width="15%">bin/</td>
+      <td>All monitors and utility scripts are in this directory.</td>
+    </tr>
+    <tr>
+      <td>data/</td>
+      <td>The raw data collected by the monitors</td>
+    </tr>
+    <tr>
+      <td>etc/</td>
+      <td>All configuration files, and the snmp MIB file.</td>
+    </tr>
+    <tr>
+      <td>msgs/</td>
+      <td>All files in this directory are displayed in the 'snipstv'&nbsp; msgs subwindow.</td>
+    </tr>
+    <tr>
+      <td>run/</td>
+      <td>The PID files for all the monitors (used to ensure only one copy of a monitor runs at
+      a time), and error file for runtime errors.</td>
+    </tr>
+    <tr>
+      <td>device-help/</td>
+      <td>Contains help files specific to a device (and optionally a variable) which is
+      displayed when a user clicks on the HELP button in snipsweb.</td>
+    </tr>
+    <tr>
+      <td>init.d/</td>
+      <td>A SysV style 'init' directory which contains scripts to start/stop/restart &nbsp; the
+      various processes.</td>
+    </tr>
+  </table>
+</blockquote>
+
+<h4>Configuration Files</h4>
+
+<p>There is a global config file for all the C monitors <tt>snips.conf</tt>,
+      typically stored under <tt>/etc</tt> or <tt>/usr/local/snips/etc</tt>
+      (the software automatically searches for the file in any of these locations).
+The snips loghost is read from this file, and this file also allows changing
+other global directory settings. A common config file for all the <u>perl</u> monitors is located in the snips directory
+under <tt>/usr/local/snips/etc/snipsperl.conf</tt>.</p>
+
+<p>The configuration file for each individual monitor is located in the <tt>/usr/local/snips/etc/</tt>
+. There are sample configuration files located in the <tt>etc/samples</tt> subdirectory.
+Using these sample files as templates, you should create configuration files for each
+monitor that you want to use. Note that in most monitors, the 'name' of the device is not
+really used by the monitor but is basically an operator friendly name for the device.</p>
+
+<p>It is recommended that these configuration files be stored using RCS (or some other
+revision control system) to prevent multiple operators from editing a file at the same
+time and also keeping old revisions automatically.</p>
+
+<h4>Starting the Monitors</h4>
+
+<p>There are two ways to start the monitors- you can start a particular monitor <u>manually</u>
+using the corresponding <tt>init</tt> script in the <tt>init.d/</tt>&nbsp; directory or <u>automatically</u>
+from crontab using the <b>keepalive_monitors.pl</b> script. This script is run
+periodically from crontab and ensures that all the desired monitors are running.</p>
+
+<p>You must list all desired monitors in the <b>keepalive_monitor.pl</b> script (edit the <tt>@{$snipshost}</tt>
+variable). Ensure that you have setup email aliases for the operations staff and also
+created a 'snips' user to run all these programs (all these steps are listed in the
+Installation document). Any error messsages from the monitors are written to the <strong>run/xxxx.error</strong>&nbsp;
+file. This file is mailed to the OPSMAIL email address when a monitor is restarted.</p>
+
+<p>After you have created the config files and edited keepalive_monitors, ensure that the
+contents of bin/crontab.snips are loaded into cron (typically done using&nbsp;&nbsp; cat
+bin/crontab.snips | cron).</p>
+
+<p>When changes are made to a config file, you can reload these changes by sending the
+respective monitor a HUP signal (or using init.d/xxx.init&nbsp; hup). Alternatively, you
+can also get the monitors to automatically reload their config files if they detect a
+change by starting the monitors with the '-a' flag for auto-reload. You should ensure that
+your changes are completely written out to the config file so that it is not half-edited
+and unusable if you use this flag.</p>
+
+<p>There might be a slight delay in reloading the config files on recieving a HUP signal,
+since the monitor finishes its current polling cycle before reloading the file.</p>
+
+<p>Generally the monitors do not need any command line argument- the default name and
+location of the configuration file and the data directory is compiled into the monitors.
+However, you can always specify an alternate config file or output data file using the
+'-c' or the '-o' command line options respectively. All monitors also accept the '-d' flag
+to indicate debug mode, in which case they write debug messages to the stderr. You can
+send a USR1 signal to any monitor to increase the level of debugging (this increases with
+each USR1 signal upto 2 and then resets to 0).</p>
+
+<p>The keepalive_monitors.pl&nbsp; script starts the logging daemon (snipslogd) first so
+that the monitors can log to this process (see next section for additional information on
+snipslogd).</p>
+
+<h4>snipslogd - the Logging Daemon</h4>
+
+<p>The snipslogd daemon listens on port 5354 of the logging host for any events sent by
+the monitors. The name of the host where snipslogd runs is set in the global <tt>snips.conf</tt>
+&nbsp; config file.
+
+<p>The snipslogd process is similar to the Unix 'syslog' daemon and the configuration file
+allows piping the logged events to any external process. To prevent any random host from
+sending it any messages, the list of allowed IP addresses (which can log to it) is listed
+in the snipslogd configuration file.</p>
+
+<p>Since this process can run external programs, it can be used to run the pager
+notification scripts, etc. This program can be used to log messages to a database, send
+emails, etc.</p>
+
+<p><span style="background-color: rgb(255,255,0)">It should be noted that an 'event' in
+snips is generated <em><strong>only</strong></em> when a value <u>crosses</u> a threshold
+in any polling interval.</span> Hence, normally you will not see any logging activity in
+snipslogd, but when a device variable <em>changes</em> its state, an event will be logged.
+This means that an event will be sent by a monitor to snipslogd both when it goes down
+(e.g. from info level to warning level) and also when it comes back up (e.g. warning level
+to info level). The loglevel is the worse of the current level and previous level (hence,
+when a device goes back from Critical to Info level, the event will be logged at loglevel
+Critical).</p>
+
+<h4>Messages Directory</h4>
+
+<p>Each of the displays has a 'messages' section where the contents of the files in the
+'MSGDIR' are displayed. You can create any text file in this directory (preferably one
+line messages), and these are displayed in the 'Messages' subwindow.</p>
+
+<h4>Routine Maintenance</h4>
+
+<p>Routine admin tasks in SNIPS consist of ensuring that all the monitors are running
+(done by running <em>keepalive_monitor.pl</em> from cron), &nbsp;and rotating all the log
+files maintained by snipslogd (done by running <em>log-maint.pl </em>periodically from
+crontab). The <em>log-maint.pl</em> script also runs the <strong>logstats.pl</strong>
+reporting tool which mails the report to the OPSMAIL email address. See the file <font
+size="2" face="Lucida Console,Courier">snips.crontab</font><font size="2"> where all these
+maintenance tasks are listed.</font></p>
+
+<hr noshade color="#808080">
+
+<h3>2.&nbsp; <a name="userInterfaces">User Interfaces</a></h3>
+
+<p>All the monitors store the current state of the devices in raw data format (in the
+/usr/local/snips/data directory). There are three different user interfaces to view and
+interpret this data. </p>
+
+<p>Note that none of these interfaces displays historical data from 'snipslogd'- they all
+work directly on the data being collected by the monitors which represents the current
+state of the network.</p>
+
+<h4>snipstv</h4>
+
+<p><strong>snipstv</strong> (snips <u>T</u>ext<u>V</u>iew), is a non-graphical, text
+'curses' based tool for displaying the raw data being collected by the monitors. Any user
+on the system where the monitors are running can run this tool. Entering the 'e' key will
+display different fields (since it is not possible to display all the possible fields in
+the limited 80 character displays). It is possible to filter events, etc.- enter 'h' to
+get detailed help on this tool.</p>
+
+<h4>SnipsWeb</h4>
+
+<p>The Web interface for displaying snips data is divided into three scripts- <strong>genweb.cgi</strong>
+which reads all the data files and generates HTML with hyperlinks to <strong>snipsweb.cgi</strong>.
+This script in turn invokes <strong>rrdgraph.cgi</strong> which generates RRD graphs for
+the device. All these programs read the etc/snipsweb-cfg.pl&nbsp; configuration file on
+startup, and this file should be edited to set your site settings.</p>
+
+<p><tt>genweb.cgi</tt>&nbsp; can be run periodically from crontab to generate 4 web pages
+(one for each severity level) or directly as a CGI program. When run as a CGI, it allows
+sorting, filtering, etc. In CGI mode, the script is reading and generating HTML in
+realtime, so if many users are accessing this CGI simultaneously, this could generate
+additional load on your server. You should protect this script using standard htaccess
+style authentication to restrict access to the script.</p>
+
+<p><tt>snipsweb.cgi</tt>&nbsp; is the complement to genweb.cgi&nbsp; and&nbsp; gives added
+functionality such as historical graphs, device specific help troubleshooting, adding
+notes for an event, hiding a known event, etc. You should definitely protect this script
+using the htaccess web authentication, even though this script has its own built in access
+control also as an alternative. </p>
+
+<p><tt>rrdgraph.cgi</tt>&nbsp; generates graphs for a device and all its monitored
+variables. It is invoked by snipsweb.cgi, and restricts access by allowing only the CGI's
+listed in the @OK_REFERER variable to run this script. This variable is customized in the
+snipsweb-cfg.cgi file mentioned above.&nbsp; rrdgraph.cgi generates the images on the fly,
+and caches the images on disk (in the <tt>rrdimg-cache/</tt> directory) also for
+efficiency.</p>
+
+<p>You should also create an <strong>etc/users</strong> file which lists the access level
+of each user (which commands they are allowed to run in snipsweb.cgi). Additionally, you
+can create help files in the <strong>device-help/</strong> directory which are named based
+on the device and/or variable name. When a snipsweb user clicks on help for a device, the
+program looks for a matching help file in the following order:</p>
+
+<blockquote>
+  <pre>&lt;devicename&gt;:&lt;deviceaddr&gt;
+&lt;devicename&gt;:&lt;variable&gt;
+&lt;devicename&gt;:&lt;sender&gt;
+default</pre>
+</blockquote>
+
+<p>where any of these can be the keyword 'default'.</p>
+
+<p>All the CGI scripts print error messages on stderr, which get logged in the web
+server's&nbsp; logfile when running in CGI mode. Look in these log files for errors in
+case of trouble.</p>
+
+<h4>tkSnips</h4>
+
+<p>This is a Tcl/tk based monitor using client-server technology. A simple daemon (called
+'ndaemon') runs on the SNIPS monitoring server listening on TCP port 5005 and it
+periodically send the event raw data to all connected tksnips clients. The tksnips
+client's then parse and format/display this snips raw data. ndaemon has no access control
+at this time, so it is important to put a firewall to restrict unauthorized access to
+ndaemon's TCP port.</p>
+
+<hr noshade color="#808080">
+
+<h3>3.&nbsp; <a name="notifications">Notifications &amp; Reports</a></h3>
+
+<p>A very flexible notification script called&nbsp; '<strong>notifier.pl</strong>'&nbsp;
+is provided with SNIPS which has a configuration file with the type of event and required
+action. Currently the possible actions are&nbsp; <em>mail</em> and <em>page</em>. A
+minimum and maximum age of the event can be defined indicating that the action should be
+taken (paging or email) only if the age of the event lies between these two values (in
+seconds). An option exists to allow 'repeat' notification (once every hour) until the age
+is exceeded.</p>
+
+<p>This program should be run from <em>crontab</em> every 5 minutes (set the value of
+$crontime accordingly in the script if run at different time intervals). This program
+should also be run from <em>snipslogd.conf</em>, so that it can send a notification as
+soon as an event occurs. When run from crontab, this program only parses Critical events
+and events that are down (i.e. no notification when they come up when run from crontab).
+However, when run from snipslogd, it reads the log lines from the stdin, and sends
+messages both when a device goes down and comes back up. The event time is set to a
+negative -1 second when running as a filter from snipslogd, so the notifier-confg file
+entry should be set accordingly.</p>
+
+<p>It is possible to write additional 'event' driven notification systems using <em>snipslogd</em>.
+Any event can be piped to an external script by snipslogd, so a page or email can be sent
+as soon as an event occurs and is logged to snipslogd. As another example, the '<strong>utility/beep_oncall</strong>'
+script uses the <em>sendpage</em> program (available from <a
+href="ftp://ftp.net.ohio-state.edu/pub/pagers">ftp://ftp.net.ohio-state.edu/pub/pagers</a>).
+Other (untested) alternatives to sendpage are are SNPP and YAPS.</p>
+
+<p>Currently the only reporting tool for historical analysis is '<strong>logstats</strong>'
+which parses the historical snipslogd event logs and generates a summary report. This is
+run by the '<strong>log-maint</strong>' script which in turn is run periodically from Unix
+cron.</p>
+
+<hr noshade color="#808080">
+
+<h3>4.&nbsp; <a name="largenets">Configurations for Large Networks</a></h3>
+
+<p>Currently SNIPS is being used to monitor devices with close to 2000 devices. The
+monitors which usually have large number of devices are:</p>
+
+<blockquote>
+  <p>ippingmon - using ICMP echo messages (typically used for router interfaces)<br>
+  portmon - for TCP sockets (typically used for web, mail, pop, imap ports)<br>
+  hostmon - for Unix host performance (disk space, load, memory)<br>
+  snmpmon - for querying SNMP data</p>
+</blockquote>
+
+<p>All these monitors except for snmpmon are designed for monitoring very large number of
+devices in parallel very efficiently. As an example, ippingmon can monitor 500 devices in
+a little over 2 minutes, and hostmon can poll 64 ports per minute. However, if the number
+of devices is still larger, you can split your devices into multiple configuration files
+&nbsp; and then use the '-x' flag to a monitor or create a symlink to the monitor to read
+these alternate config files.</p>
+
+<p>As an example, if you divide all your ippingmon devices between 2 config files, and
+name these configuration files&nbsp; <tt>ippingmon-A-confg</tt>&nbsp; and <tt>ippingmon-B-confg</tt>.
+All you have to do is either of the following methods:</p>
+
+<blockquote>
+  <pre>ln -s bin/ippingmon bin/ippingmon-A
+ln -s bin/ippingmon bin/ippingmon-B</pre>
+</blockquote>
+
+<p>OR</p>
+
+<blockquote>
+  <pre>ippingmon -x A
+ippingmon -x B</pre>
+</blockquote>
+
+<p>The monitor will automatically look for and load the respective config files based on
+its own name (or '-x' extension) by appending '<tt>-confg</tt>' to it.</p>
+
+<p>Remember to update the&nbsp; <em>keepalive_monitors</em> script with these new names or
+flags if you use either of these methods.</p>
+
+<hr noshade color="#808080">
+
+<h2><a name="appendix">APPENDIX</a></h2>
+
+<h3>Monitors</h3>
+
+<p>These are quick reference tables for the various field values in each of the current
+SNIPS monitors. The 'address' field is typically used by the monitor to query the device.
+The 'device name' field is usually a 'common' or 'alias' name for the device being
+monitored. If there is a sub-device or sub-element (such as an interface, file partition
+or domain name) being monitored, this is prefixed to the device name with a '+' as a
+separator.</p>
+
+<table class="small" border="1" cellpadding="2" cellspacing="0" width="90%">
+  <tr>
+    <th width="16%">Monitor </th>
+    <th width="16%">Device Name </th>
+    <th width="17%">Address </th>
+    <th width="17%">Var Name </th>
+    <th width="17%">Var Values </th>
+    <th width="17%">Var Units </th>
+  </tr>
+  <tr>
+    <td>etherload</td>
+    <td>interface - type + any name<br>
+    (eth0-Ethernet+fileserver)</td>
+    <td>any name</td>
+    <td>Bandwidth or<br>
+    PktsPerSec</td>
+    <td>0-100 or u_long</td>
+    <td>%age or pps</td>
+  </tr>
+  <tr>
+    <td>nsmon</td>
+    <td>domainName + any name</td>
+    <td>addr/fqdn</td>
+    <td>named-status</td>
+    <td>0 or 1</td>
+    <td>SOA</td>
+  </tr>
+  <tr>
+    <td>ntpmon</td>
+    <td>any name</td>
+    <td>addr/fqdn</td>
+    <td>ntp</td>
+    <td>1 - 16</td>
+    <td>Stratum</td>
+  </tr>
+  <tr>
+    <td>ippingmon</td>
+    <td>any name</td>
+    <td>addr/fqdn</td>
+    <td>ICMP-ping</td>
+    <td>0 - 10</td>
+    <td>Pkts Rcvd</td>
+  </tr>
+  <tr>
+    <td>rpcpingmon</td>
+    <td>any name</td>
+    <td>addr/fqdn</td>
+    <td>Portmapper</td>
+    <td>0 or 1</td>
+    <td>Status</td>
+  </tr>
+  <tr>
+    <td>portmon</td>
+    <td>any name</td>
+    <td>addr/fqdn</td>
+    <td>NewsPort<br>
+    WebPort, etc.</td>
+    <td>0 or 1</td>
+    <td>Port</td>
+  </tr>
+  <tr>
+    <td>radiusmon</td>
+    <td>any name</td>
+    <td>addr/fqdn</td>
+    <td>radius</td>
+    <td>0 or 1</td>
+    <td>Status</td>
+  </tr>
+  <tr>
+    <td>tpmon</td>
+    <td>any name</td>
+    <td>addr/fqdn</td>
+    <td>Thruput</td>
+    <td>0 - u_long</td>
+    <td>Kbps</td>
+  </tr>
+  <tr>
+    <td>trapmon</td>
+    <td>any name</td>
+    <td>addr/fqdn</td>
+    <td><font color="#FF0000"><em>trapname</em></font></td>
+    <td>0</td>
+    <td>Trap</td>
+  </tr>
+</table>
+
+<h4>&nbsp; Perl Monitors:</h4>
+
+<table class="small" border="1" cellpadding="1" cellspacing="0" width="90%">
+  <tr>
+    <th width="16%">Monitor </th>
+    <th width="16%">Hostname </th>
+    <th width="17%">Address </th>
+    <th width="17%">Var Name </th>
+    <th width="17%">Var Values </th>
+    <th width="17%">Var Units </th>
+  </tr>
+  <tr>
+    <td>apcmon</td>
+    <td>any name</td>
+    <td>any name</td>
+    <td>(from config file)<br>
+    online, battery, temp</td>
+    <td>as measured</td>
+    <td>from configfile<br>
+    volts, hertz</td>
+  </tr>
+  <tr>
+    <td>armon</td>
+    <td><font color="#FF0000">zone name</font></td>
+    <td><font color="#FF0000">Net number</font></td>
+    <td>Reg-ATalkRoute or Unreg_ATalkRoute</td>
+    <td>0 or 1</td>
+    <td>Entry</td>
+  </tr>
+  <tr>
+    <td>bgpmon</td>
+    <td>Peer Hostname</td>
+    <td>Peer IP</td>
+    <td>BGP-routername</td>
+    <td>0 or 1</td>
+    <td>State</td>
+  </tr>
+  <tr>
+    <td>bpmon</td>
+    <td>any name</td>
+    <td>server IP</td>
+    <td>Bootp_Server</td>
+    <td>0 or 1</td>
+    <td>Entry</td>
+  </tr>
+  <tr>
+    <td>ciscomon</td>
+    <td>any name</td>
+    <td>addr/fqdn</td>
+    <td>CPUusage, Airflow, Inlet, +12V, etc.</td>
+    <td>as measured</td>
+    <td>Percent, Deg, mVolt, etc.</td>
+  </tr>
+  <tr>
+    <td>hostmon</td>
+    <td>(from data file)<br>
+    Subdevice+addr</td>
+    <td>(from data file)<br>
+    Device addr/fqdn</td>
+    <td>(from config file)<br>
+    NFStimeout, Diskfree%</td>
+    <td>as measured</td>
+    <td>(from data file)<br>
+    MB, drops</td>
+  </tr>
+  <tr>
+    <td>novellmon</td>
+    <td><font color="#FF0000">Server Name</font></td>
+    <td><font color="#FF0000">Service Type</font></td>
+    <td>IPX_Server</td>
+    <td>0 or 1</td>
+    <td>Entry</td>
+  </tr>
+  <tr>
+    <td>nrmon</td>
+    <td><font color="#FF0000">Next Hop</font></td>
+    <td><font color="#FF0000">Network</font></td>
+    <td>Reg_NovellRoute or Unreg_NovellRoute</td>
+    <td>0 or 1</td>
+    <td>Entry</td>
+  </tr>
+  <tr>
+    <td>smbmon</td>
+    <td><font color="#FF0000">Server + service</font></td>
+    <td>address</td>
+    <td>SMBserver</td>
+    <td>0 or 1</td>
+    <td>Entry</td>
+  </tr>
+  <tr>
+    <td>snmpmon</td>
+    <td>(from data file)<br>
+    Subdevice+addr</td>
+    <td>(from data file)<br>
+    device address/fqdn</td>
+    <td>(from config file)<br>
+    ifErrors, PktRate</td>
+    <td>measured</td>
+    <td>(from data file)<br>
+    Mbps</td>
+  </tr>
+  <tr>
+    <td>sqlmon</td>
+    <td>any name</td>
+    <td>any name</td>
+    <td>SQLserver</td>
+    <td>0 or 1</td>
+    <td>Status</td>
+  </tr>
+  <tr>
+    <td>syslogmon</td>
+    <td>Hostname</td>
+    <td><font color="#FF0000">reg expr from config file</font></td>
+    <td>(from config file)<br>
+    DiskErr, MemParity</td>
+    <td>as measured</td>
+    <td>LogMest</td>
+  </tr>
+  <tr>
+    <td>upsmon</td>
+    <td>any name</td>
+    <td>any name</td>
+    <td>AC_Power</td>
+    <td>0 or 1</td>
+    <td>Avail</td>
+  </tr>
+</table>
+
+<hr>
+
+<address>
+  <a href="mailto:vikas@navya.com"><small>Vikas Aggarwal</small></a> 
+</address>
+</body>
+</html>

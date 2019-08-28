@@ -1,0 +1,168 @@
+#!/usr/local/bin/perl
+
+#           ########  hostmon-client.irix5  #######
+#
+# IRIX 5.3
+#
+## $Header: /home/cvsroot/snips/perl-monitors/hostmon-osclients/hostmon-client.irix5,v 1.0 2001/07/09 04:40:14 vikas Exp $
+#
+# This file is appended by 'hostmon-client'
+#
+
+###
+# All the following functions must print out the following:
+#   		VARIABLE VALUE UNITS COMMENT
+# For variables that are part of a varying maximum, normalize it and give
+# the percentage instead (e.g. free memory, etc.)
+###
+###
+use strict;
+use vars qw($debug);
+
+### csh% uptime
+#      4:26am  up 10:09,  2 users,  load average: 0.01, 0.07, 0.00
+#
+sub uptime {
+  my $cmd = "uptime";
+  my $value = -1 ;
+  my $uptime = 0;    
+  open (CMD, "$cmd |");
+  while (<CMD>) {
+    $debug &&  print STDERR "(debug)uptime: $_" ;
+    chomp;
+    if ( /^.*up\s+(\d+)\s+day.*,\s*(\d+)\s*mins,.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ )
+    {
+      $uptime = ($1 * 1440) + $2;
+      printf "Uptime %d mins\n", $uptime;
+      printf "Load5 %d load-5min\n", int($4) ;
+      last ;
+    }elsif ( /^.*up\s+(\d+)\s+day.*,\s*(\d+):(\d+),.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ ) {
+      $uptime = ($1 * 1440) + ($2 * 60) + $3;
+      printf "Uptime %d mins\n", $uptime;
+      printf "Load5 %d load-5min\n", int($5) ;
+      last ;
+    }
+    elsif ( /^.*up\s+(\d+):(\d+),.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ ) {
+      $uptime = ($1 * 60) + $2;
+      printf "Uptime %d mins\n", $uptime;
+      printf "Load5 %d load-5min\n", int($4) ;
+      last ;
+    }
+    elsif ( /^.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ ) {
+      printf "Load5 %d load-5min\n", int($2) ;
+      last ;
+    }
+    else { print STDERR "(debug)uptime() : command format not understood.\n"; }
+  }	
+  close (CMD);
+  
+  #    print "Load 9999 load UnParseableInput\n";
+}
+
+### 
+# pstat NOT SUPPORTED ON IRIX
+#
+sub pstat {
+  return;
+}  # end &pstat()
+
+###
+# nfsstat not supported on IRIX
+#
+sub nfsstat {
+  return;
+}	# end &nfsstat()
+
+## df
+# Extract space availability stats. Printing out available MBytes and
+# percent full (together they make sense).
+# Note that this command prints out a number of lines with same variable
+# name (one for each disk). The hostmon server picks out the worst of
+# these lines.
+#
+# irix> df -i -k
+# Filesystem    Type  kbytes     use   avail %use    iuse  ifree %iuse  Mounted
+# /dev/root      efs  966574  615444  351130  64%   20730 188204   10%  /
+# /dev/dsk/dks   efs 3013012 1353603 1659409  45%   22444 611754    4%  /var
+# /dev/dsk/dks   efs 1068340  743093  325247  70%   33267 191579   15%  /usr
+#
+sub df {
+  
+  open (CMD, "df -i -k |");
+  
+  while (<CMD>) {
+    chomp;
+    if (/^\s*Filesystem/)  { next; } # ignore header line
+    if (/^\/dev\/dsk\/0s3/)  { next; } # just skip the SVR4 specific 
+    if (/^\/proc/)  { next; }	# OS type filesystems
+    if (/^\/hinv/)  { next; }
+    if (/^\/dev\/fd/)  { next; }
+    $debug && print STDERR "(debug)df: $_\n" ;
+    
+    if (/^.*\s+(\d+)\s+(\d+)%\s+\d+\s+(\d+)\s+(\d+)%\s+(\/\S*)\s*$/)
+    {
+      printf "DFspace_avail %d MB $5\n", int($1/1000);
+      print  "DFspace_\%used $2 \%full $5\n";
+      print  "DFinodes_avail $3 inodes $5\n";
+      print  "DFinodes_\%used $4 \%inodes $5\n";
+    }
+  }
+  close (CMD);
+
+}	# end &df()
+
+##
+# iostat not supported on IRIX
+#
+sub iostat {
+    return;
+}	# end &iostat()
+
+
+## 
+# vmstat not supported on IRIX (whats with it folks ??)
+# 
+sub vmstat {
+    return;
+}
+
+##       netstat
+# Extract collision and error rates.
+# See comments in hostmon-client.sunos
+#
+# irix> netstat 5
+#    input   (ec0)     output            input  (Total)    output
+# packets  errs  packets  errs colls  packets  errs  packets  errs colls 
+#   <first line with total values, ignore>
+#     425     0       36     0     0      433     0       44     0     0 
+#     510     0       67     0     2      518     0       75     0     2 
+# 
+sub netstat {
+  my $i = 0;
+  my $cmd = "netstat";
+  
+  my $pid = open (CMD, "$cmd 10 |"); # 10 second sampling
+  while (<CMD>) {
+    if (/^\s+[A-z]+/) { next; }	# ignore header lines if any
+    if (++$i < 3)  { next ;}	# ignore first 3 lines
+    chomp;
+    $debug && print STDERR "(debug)netstat: $_\n" ;
+    
+    if (/^\s*\d+(\s+\d+)*\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$/)
+    {
+      my ($ipkts, $opkts) = ($2, $4);
+      
+      if ($ipkts == 0) { $ipkts = 1; } # avoid division by zero
+      if ($opkts == 0) { $opkts = 1; }
+      printf "NetIErr %d PktRate\n", int ($3 * 100 / $ipkts);
+      printf "NetOErr %d PktRate\n", int ($5 * 100 / $opkts);
+      printf "NetColl %d PktRate\n", int ($6 * 100 / $opkts);
+    }
+    kill ('TERM', $pid) ; last ; # no more lines
+  }	
+  close (CMD);
+}	# end &netstat()
+
+
+1;
+

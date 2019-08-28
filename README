@@ -1,0 +1,74 @@
+$Header: /home/cvsroot/snips/README,v 1.0 2001/07/09 03:02:43 vikas Exp $
+
+README for SNIPS v1.0 (a.k.a  NOCOL v5.0)
+=====================
+
+SNIPS (Systems & Network Integrated Polling Software) is a rewrite
+of the popular NOCOL network monitoring package with many additional
+features and bug fixes, most notably integration with RRDtool for
+graphing and historical trends.
+
+It runs on Unix platforms and is capable of monitoring network and
+system variables such as ICMP or RPC reachability, SNMP variables,
+nameservers, tcp ports, ethernet load, host performance, SNMP traps,
+modem line usage, appletalk & novell routes/services, BGP peers, syslog
+files, etc.
+
+The available user interfaces (displays) are:
+
+    - Web based (websnips)
+    - Tcl/Tk based (tkSnips)
+    - Text/curses based (textsnips)
+
+Any number of displays can run and they all view common monitored data from a 
+single set of monitoring agents.
+
+The monitored data is also stored using RRD, and can be plotted using MRTG
+style graphs. Devices are escalated in severity during successive monitoring
+cycles to avoid generating excessive operator level alarms and customizable
+priority notification.
+
+This package is being used to monitor networks with as many as 1600 devices
+in many ISPs.
+
+To date, the various monitoring agents developed are:
+
+	- ICMP
+	- RPC portmapper
+	- Ethernet load (bandwidth & pps)
+	- TCP ports
+	- Radius servers
+	- SYSLOG logfiles (for specified patterns)
+	- BGP peer status
+	- SQL (using DBI interface)
+	- Unix host performance (disks, memory, swap, load, nfs, collisions)
+	- SNMP variables monitor (RMON, Cisco router, terminal server)
+	- TCP data throughput monitor
+	- Nameserver (named)
+	- SNMP traps
+	- NTP stratum (Network Time Protocol)
+	- UPS (APC) battery level monitor
+	- Usage of terminal server modem lines (busy lines)
+	- Appletalk route monitor (for cisco routers)
+	- Novell service monitor
+	
+A PERL interface is available for developing additional monitors in the PERL
+programming language (it is fairly easy to add additional monitors to the
+package).
+
+The logging daemon can be interfaced with a paging program such as
+'sendpage' (or other SMS devices) to send device failure notifications.
+
+The software is freely available on the Internet from:
+	http://www.netplex-tech.com/software/snips  or
+	ftp://ftp.navya.com/pub/snips.tar.gz 
+
+Please send a message to 'snips-users-request@navya.com' to be added to the
+'snips-users' mailing list for updates and bug fixes. Mail comments and
+bugs to 'vikas@navya.com'.
+
+	Vikas Aggarwal
+	(vikas@navya.com)
+	-----------------
+
+Copyright (c) 2000 Netplex Technologies Inc.

@@ -1,0 +1,25 @@
+## autoconf support for SNIPS is not yet complete.
+#  Makefile.am files have been created for all directories. However:
+#	1. etherload needs -DSOLARIS etc. for network interface files.
+#	2. how to install the '*.init' files?
+#	3. snipsweb needs RRD and PERL variables
+#	4. how to autodetect or specify compiling with RRD
+#	5. Remove osdefs.h completely.
+#	6. Specify the MAIL aliases somewhere (config file?)
+#	7. Specify the PS flags.
+#	8. Specify all the various dirs from Makefile.head in configure.in
+
+cp autoconf/configure.in .
+aclocal
+mv aclocal.m4 autoconf/
+automake
+autoheader
+autoconf -l autoconf
+
+
+Add following at top of C files:
+
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+

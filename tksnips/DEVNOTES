@@ -1,0 +1,9 @@
+			DEV NOTES for tkSNIPS
+
+1. Replace with Java interface.
+
+2. Sends all events in 'xx|xx|xx|' format to the Tk client.
+   Needs to be changed for new EVENT structure.
+
+3. Currently does not handle new EVENT fields (rating, etc.)
+

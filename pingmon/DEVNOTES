@@ -1,0 +1,8 @@
+			DEV NOTES for PINGMON
+
+1. ippingmon- If too many devices on the command line, then the environment
+   variable cuts off the cmd line (limited by sysconf(SC_ARG_MAX)??). So
+   should fork and use pipes to write the list of devices on the stdin.
+
+2. does not use 'read_event()' and 'rewrite_event()' but uses read()
+   and write() directly for speed.

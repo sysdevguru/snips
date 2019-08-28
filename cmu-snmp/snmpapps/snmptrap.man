@@ -1,0 +1,36 @@
+.SH NAME
+snmptrap - Send an SNMPv1 Trap to an SNMP agent acting in a manager
+role.
+.SH SYNOPSIS
+snmptrap [ -a agent-addr ] host community trap-type specific-type
+device-description
+
+.SH "DESCRIPTION"
+Snmptrap will send an SNMPv1 trap to a network entity.
+.PP
+The
+.I host
+specification may be either a host name or an internet address
+specified in "dot notation"
+.PP
+.I community
+is the community for the trap.
+.PP
+The 
+.I trap-type 
+is an SNMPv1 trap identifier, as defined in RFC 1157.
+.PP
+The 
+.I specific-type 
+is the enterprise specific trap type.  This is only used if the
+trap-type is set to Enterprise Specific (6).
+.PP
+The value of 
+.I device-description 
+is placed in a system.sysDescr.0 variable, and sent along with the
+trap.
+.PP
+Adding a "-d" to the argument list will cause the application to dump
+input and output packets.
+.PP
+The "-a" flag will 'fake' a trap from another entity.

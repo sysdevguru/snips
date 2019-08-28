@@ -1,0 +1,79 @@
+# Config file for portmon snips monitor
+#
+# Can monitor TCP ports such as:  www, smtp, pop, news, gopher
+#
+# Order is important... the first substring match (case ignored) will return
+# and NOT test the remaining strings. Put the high severity tests first.
+# To check just connectivity to a port, just put the HOST line.
+#
+# Format:
+#	POLLINTERVAL  600
+#	TIMEOUT 30
+#	SIMULCONNECTS 64
+#	HOST <name> <addr>  <variable>  <port#> <failseverity> [send-string]
+#	[maxseverity	response]
+#	[maxseverity	response]
+#	QUIT  string to close connection
+#
+# 'send-string'  and the responses are optional. \r\n in 'send-string' are 
+# converted to CR and LF respectively. A 'newline' is sent after each
+# string. Remember that connections to http daemons needs two newlines.
+#
+##
+POLLINTERVAL	600
+TIMEOUT	30
+
+# this is the number of simultaneous sites that should be monitored.
+# Do not make this too large (max 64)
+SIMULCONNECTS	64
+
+# To enable RRDtool data collection
+RRDTOOL  ON
+
+# Just check connectivity to 'gopher' port.
+HOST  gopher	128.121.50.2	GOPHERport	70	Critical
+QUIT  quit
+
+HOST  newshost1	128.121.50.145  NEWSport  119  Critical 
+info	posting ok
+QUIT	quit
+
+# for innd. Checking for 'no space'  'expire running' 'bad article file'
+HOST  newshost3	192.41.171.5	NEWSport  119	Critical
+critical	space
+info		expire
+critical	Bad file number writing history file -- throttling
+info		posting ok
+info		no posting
+QUIT		quit
+
+HOST  nisc	128.21.50.7	SMTPport  25	Critical  HELO portmon.test
+info	250
+QUIT	quit
+
+# for POP3
+HOST  pophost   194.2.2.4	POP3port  110	Critical  user snips\r\npass snipspwd
+info	+OK
+QUIT	quit
+
+# for IMAP3
+HOST  imaphost   194.2.2.4	IMAP3port  143	Critical  A001 LOGIN snips snipspass\r\n
+info	A001 OK
+QUIT	A002 LOGOUT
+
+# Web httpd daemon
+HOST  www	128.121.3.40	WWWport   80	Critical  GET /index.html HTTP/1.0\r\n
+info		<HEAD>
+
+# Reference a virtual web site with the full URL
+HOST  www	128.121.3.40	WWWport   80	Critical  GET http://www.abc.com/index.html HTTP/1.0\r\n
+info		<HEAD>
+
+# Following to check how much time it takes to fetch an entire web
+# page. Must search for a string written out towards the end of the
+# web page. ONLY SPECIFY TIME ON THE FIRST LINE. Rest are all responses.
+# The times are thresholds for warning, error and critical.
+HOST  localwww	127.0.0.1	WWWspeed 80  Critical  GET /test.html HTTP/1.0\n
+TIME	5  10  15	</HTML>
+TIME		</HEAD>
+#

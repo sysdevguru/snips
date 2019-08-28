@@ -1,0 +1,169 @@
+.\" $Header: /home/cvsroot/snips/man/etherload.8,v 1.0 2001/07/08 22:31:48 vikas Exp $
+.\"
+.TH etherload 8 "June 2001"
+.SH NAME
+etherload \- Network load (bandwidth & pps) monitor for ethernet segments.
+.SH USAGE
+.B etherload
+[
+.B \-d
+] [
+.B \-e
+] [
+.B \-i
+.I <scan interval>
+] [
+.B \-s
+.I <sleep secs>
+]  [
+.IR devlist or
+.I snips-config-file
+]
+.SH NOTE
+etherload can run as a standalone program or as a part of the SNIPS
+monitoring package depending on how it is compiled.
+.SH OPTIONS
+.TP
+.B \-d
+For debug mode. Multiple \fI \-d\fR options can be repeated for higher
+level of debugging. To get debug messages beyond level 2, the program
+should have been compiled with the \fI DEBUG\fR option.
+.TP
+.B \-e
+For extended output format. By default, the program just prints out the
+total packets, drops, packets-per-second and percentage of bandwidth utilized.
+In the extended mode the program also prints out the pkts and bytes
+per interval, the average packet size, and the bits-per-second.
+.TP
+.BI \-i " scansecs"
+This specifies the number of seconds in each sampling interval. The
+data is collected for this number of seconds and the statistics
+displayed in the output are calculated over this time interval. A
+value of 15 secs is good (too small a value would pick up bursty
+traffic patterns- something that could be normal on an ethernet).
+.TP
+.BI \-s " sleepsecs"
+The number of seconds between each scan sample.
+.SH DESCRIPTION
+.LP
+.I etherload
+is a program to monitor the load (percentage of bandwidth utilized)
+and the packets-per-second on an ethernet segment. It runs on Unix
+workstations and counts the packets on the wire during the specified
+sample interval. It then calculates the load (as a percentage of the
+maximum 10Mbps) over the sampling interval and prints it out
+periodically.
+.LP
+Devices to be monitored can be specified on the command line. If no
+devices are specified,
+.I etherload
+searches for all active devices and monitors those.
+.LP
+The program does \fI not\fR look inside the packets (does not perform
+the function of a \fI sniffer\fR .
+The program has to be installed 'suid' root on most
+systems to access the network interface (in addition, on Ultrix/OSF systems
+the super-user has to enable  promiscous mode operation on the network
+interfaces using
+.I pfconfig +promisc +copyall
+to enable the program to recieve all network packets. It is \fI strongly\fR
+recommended to change the permissions on the device files so that normal
+users cannot read the device files \- see BUGS below).
+The program loses its super-user mode once it has opened the network
+devices, so it is safe to be installed as suid root.
+.LP
+Packets can be dropped by the monitoring interface due to buffer space
+limitations. These drops are reported on the output. Some network interfaces
+have limitations such as they do not report collisions, dropped packets
+or packets sourced by themselves (see the LIMITATIONS section below).
+.\"
+.SH SNIPS Support
+The program can be run as part of the
+.I snips
+network monitoring package by defining
+.I SNIPS
+during compile time. In this mode, a configuration file can be specified
+on the command line (the default configuration file is
+.I etherload\-confg
+in the 
+.I SNIPS/etc
+directory). The configuration file specifies the
+devices to monitor and the 3 thresholds for each interface device 
+(packets-per-sec and percent-load). The three thresholds are the
+.I warning, error
+&
+.I critical
+limits respectively, which are the maximum severity levels that the
+event is escalated to when it exceeds the respective threshold value.
+.LP
+The program substitutes its name in the SNIPS 'sender' field and tacks on
+.I \-confg
+to create the name of the configuration file. Hence,
+in order to monitor multiple ethernets segments by running this program 
+on multiple
+hosts, one can simply rename the program (or create a symbolic link)
+(e.g.
+.IR etherload.hostx )
+and create a corresponding config file called
+.I etherload.hostx\-confg
+in the SNIPS/etc directory.
+.\"
+.SH BUGS & LIMITATIONS
+Modern LANs are setup using switches and not hubs which isolate traffic
+between switched segments.
+.LP
+.I etherload
+uses
+the \fB NIT\fR interface under SunOS 4.x,
+the \fB dlpi\fR interface under Solaris 2.x and SysV R4,
+the \fB snoop\fR interface under Irix 4.x,
+the \fB packetfilter\fR interface under Ultrix 4.x
+the \fB bpf\fR under BSDI (and SunOS if installed).
+and \fB packet\fR under Linux.
+.LP
+Most interfaces do not report
+.I collisions
+or other network errors (thus cannot be used as full purpose "sniffers").
+.LP
+The SunOS 
+.I nit
+device cannot its own traffic (the interface it is associated with).
+Hence, this program should not be run on a Sun system which is itself
+a major traffic generator.
+.LP
+The Ultrix 
+.I pfilt
+device might give wrong packet drop counts if the ENNONEXCL mode is set for
+this filter. Without this mode, the packet is not delivered to any other filter
+once it is accepted by a filter in exclusive mode. Furthermore, FDDI support
+on Ultrix 4.2 systems requires kernel patches.
+.LP
+OSF/1 systems need to have PACKETFILTER configured in the kernel, and the
+minor
+.BI pf x
+devices created in the /dev/pf directory \- see 
+.BI packetfilter (8)
+for more information.
+Furthermore, the interface must be put into promiscous mode using
+.B pfconfig +p +c
+so that it can receive all network packets.
+To prevent other users from snooping on the network, change the
+permissions on the device files so that others cannot read or write
+to these files (use
+.I chmod o-rw /dev/pf/*
+to deny normal users read/write access).
+.LP
+Network bridges segment the ethernet traffic. Since traffic on a bridged
+segment is localized, 
+.I etherload 
+cannot monitor traffic past the local segment on which the host resides.
+.\"
+.SH AUTHOR
+.nf
+Vikas Aggarwal \fI vikas@navya.com\fR
+.fi
+This program should probably be rewritten using the popular
+.I tcpdump
+interface.
+.SH SEE ALSO
+bpf(4) nit(4) packetfilter(4) snoop(7) dlpi(7) tcpdump(8)

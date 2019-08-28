@@ -1,0 +1,112 @@
+.\"$Header: /home/cvsroot/snips/man/pingmon.8,v 1.0 2001/07/08 22:31:48 vikas Exp $
+.\"
+.TH PINGMON 8 "June 2001"
+.SH NAME
+pingmon \- SNIPS reachability and round-trip time monitor for hosts and 
+network devices (
+.BR ip pingmon,
+.BR rpc pingmon
+& 
+.BR osi pingmon)
+.SH SYNOPSIS
+.B pingmon
+[
+.B \-a
+] [
+.B \-d
+] [
+.B \-o
+.I output-file
+] [
+.I config-file
+] [
+.B \-x
+]
+.SH DESCRIPTION
+.LP
+.BR ippingmon ,
+.BR rpcpingmon ,
+.B osipingmon
+are SNIPS monitors for testing reachability of remote hosts and network
+devices.
+.I ippingmon 
+and 
+.I osipingmon
+monitor reachability using ICMP echo requests, and
+.I rpcpingmon
+tests the status of the portmapper on remote hosts.
+.LP
+The ICMP monitors use the standard
+.I ping
+(or
+.IR multiping )
+program to send ICMP packets to the list of hosts specified in the 
+configuration file. For icmp monitors, both round trip time and packet loss
+is measured and the severity of the device is escalated if the thresholds
+specified in the config file are exceeded.
+.LP
+The RPC ping monitor just checks to see if the portmapper is responding
+(timeout is 15 seconds) and does not measure response time (it uses the
+.I rpcping
+program).
+.LP
+The programs do a 
+.IR popen (3)
+call to the respective ping programs and parse the output to determine the
+status of the device. Two support programs are provided \-
+.I multiping
+and
+.I rpcping
+for use with the pingmon monitors.
+The
+.I osiping
+program is available with OSI protocol software and usually produces output
+similar to the IP ping program.
+.LP
+The
+.BR multiping (8)
+program is very useful to test a large number of devices via IP ICMP since
+it can take a large amount of time in each pass before a device is tested
+again.
+It is advisable to use this program instead of the standard Unix ping program.
+No such program is available (at this time) for OSI networks.
+.\"
+.SH OPTIONS
+.TP 20
+.B \-a
+autoreload the configuration file if it is updated since last reload and if
+it is at least 1 minute old.
+.TP
+.B \-d
+selects verbose debugging output mode. Specify multiple times to increase the
+debug level.
+.TP
+.BI "\-o" " output file"
+Name of the file to which to write the output.  This file is 
+.I not
+in human-readable format, and is intended to be processed by the 
+.BR snipstv (1)
+display program.
+.TP
+.B \-x
+extension that is added to the program name to create the config file name
+and output file name.
+.TP
+.I config-file
+This file lists the hosts to be queried for the nameserver. A sample config
+file is provided with the software.
+.\"------------------------------------
+The configuration files are expected to be in the ETCDIR and have the name
+.B ippingmon-confg
+or
+.B rpcpingmon-confg
+or
+.B osipingmon-confg
+(depending on the monitor being used\- IP ping, OSI ping or RPC ping).
+.LP
+Sample config files are provided with the monitors.
+.SH CAVEATS
+The program relies on external ping programs and expects to parse ping output
+in a pre-determined format.
+.\"------------------------------------
+

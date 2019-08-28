@@ -1,0 +1,7 @@
+		     DEV NOTES FOR lib
+
+1. Add lib call 'opendatafile()' which automatically reads/writes
+   the data version.
+
+2. Remove getdate.y, and replace with simpler C function.
+

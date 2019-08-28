@@ -1,0 +1,97 @@
+# $Id: Makefile.mid,v 1.4 2001/09/24 15:30:51 vikas Exp $
+#
+
+# Need the locations of ROOTDIR PERL PING MAIL
+#PERL =	@PERL@
+PING = @PING@
+MAIL = @MAIL@
+
+# The following are only required for C programs (CMU applications)
+PROGCDEFS =
+PROGCLIBS = $(OS_LIBS)
+
+# directory for CMU snmp sources
+CMUSNMP =	$(SRCDIR)/cmu-snmp
+##
+#
+PROGS = apcmon armon bgpmon bpmon ciscomon modemmon novellmon nrmon \
+	hostmon hostmon-collector hostmon-osclients/hostmon-client \
+	smbmon sqlmon snmpmon snmpmon-collector snmpgeneric \
+	syslogmon upsmon rcisco testlog
+
+# to create init files to start/stop programs
+INITFILES = apcmon armon bgpmon bpmon ciscomon modemmon novellmon nrmon \
+		hostmon smbmon sqlmon snmpmon snmpgeneric syslogmon upsmon
+
+CONF = snipsperl.conf
+
+all:	snmpprogs
+	@echo "SNIPS PERL monitors"
+	@echo " Doing substitutions for PERL, ROOTDIR, PING on: "
+	@for f in $(PROGS) $(CONF) ; do \
+	  if [ -f $$f ]; then \
+	   echo "  $$f" | tr -d '\012' ;\
+	   sed -e '1s|^#!/.*/perl.*|#!$(PERL)|' \
+		-e 's#^\(\ *$$snipsroot\ *=\ *\)\"\(.*\)\"\(.*SET_THIS.*\)#\1 "$(ROOTDIR)" \3#' \
+		-e 's#^\(\ *$$snipsroot\ *=\ *\)q(\(.*\))\(.*SET_THIS.*\)#\1 q\($(ROOTDIR)\) \3#' \
+		-e 's#^\($$ping\ *=\ *\)\"\(.*\)\"\(.*SET_THIS.*\)#\1 "$(PING)" \3#' \
+		-e 's#^\($$ping\ *=\ *\)q(\(.*\))\(.*SET_THIS.*\)#\1 q\($(PING)\) \3#' \
+		-e 's#^\(\ *$$OPSMAIL\ *=\ *\)q(\(.*\))\(.*SET_THIS.*\)#\1 q\($(OPSMAIL)\) \3#' \
+		-e 's#^\(\ *$$ADMINMAIL\ *=\ *\)q(\(.*\))\(.*SET_THIS.*\)#\1 q\($(ADMINMAIL)\) \3#' \
+		-e 's#^\(\ *$$email_program\ *=\ *\)q(\(.*\))\(.*SET_THIS.*\)#\1 q\($(MAIL)\) \3#' \
+		$$f >$$f.seds ;\
+	 fi ;\
+	done ;\
+	echo ""
+
+snmpprogs:
+	@if [ -d $(CMUSNMP)/snmpapps ]; then \
+	  echo 'Making snmpwalk under $(CMUSNMP)/snmpapps' ;\
+	  cd $(CMUSNMP)/snmpapps ;\
+	  if [ ! -f Makefile ]; then \
+	   ./configure --quiet --prefix=$(CMUSNMP) \
+		--disable-shared --with-snmp=$(CMUSNMP) ;\
+	  fi ; \
+	  make CC="$(CC)" snmpwalk ; \
+	  make CC="$(CC)"  snmpget ; \
+	 else \
+	  echo "$(CMUSNMP)/snmpapps  does not exist" ;\
+	  exit 1 ;\
+	 fi
+
+# ideally hostmon-osclients/ need not go into the BINDIR, but we are
+# putting it all there for now.
+install:
+	-@[ -d $(BINDIR)/hostmon-osclients ] || mkdir $(BINDIR)/hostmon-osclients
+	-@echo "Installing files in $(BINDIR)/hostmon-osclients" ;\
+	  for f in hostmon-osclients/* ; do \
+	   if [ -f $$f ]; then \
+	     $(INSTALL) $(INSTALLFLAGS) -c -m 755 $$f $(BINDIR)/hostmon-osclients/ ;\
+	   fi \
+	  done
+	-@cd $(BINDIR)/hostmon-osclients ; \
+	  if [ -f hostmon-client.seds ]; then \
+		$(INSTALL) $(INSTALLFLAGS) -c -m 755 hostmon-client.seds  hostmon-client ;\
+		rm -f hostmon-client.seds ;\
+	  fi
+	-@echo "Installing perl monitors under $(BINDIR)" ;\
+	  for f in $(PROGS) ; do \
+	    $(INSTALL) $(INSTALLFLAGS) -c -m 755 $$f.seds $(BINDIR)/$$f ;\
+	  done
+	-@for f in $(CONF) ; do \
+	   if [ ! -f $(ETCDIR)/$$f ]; then \
+		$(INSTALL) $(INSTALLFLAGS) -c -m 644 $$f.seds $(ETCDIR)/$$f ;\
+	   fi \
+	 done
+	$(INSTALL) $(INSTALLFLAGS) -c -m 755 $(CMUSNMP)/snmpapps/snmpwalk $(BINDIR)/
+	$(INSTALL) $(INSTALLFLAGS) -c -m 755 $(CMUSNMP)/snmpapps/snmpget  $(BINDIR)/
+	$(INSTALL) $(INSTALLFLAGS) -c -m 444 $(CMUSNMP)/mib-v2.txt $(ETCDIR)/
+	@if [ -f $(ETCDIR)/mibII.txt ]; then \
+		mv $(ETCDIR)/mibII.txt $(ETCDIR)/mibII.txt.old ;\
+	 fi 
+	@echo  "See $(SRCDIR)/perl-monotors/README for further customizations"
+
+clean:
+	@-cd $(CMUSNMP)/snmpapps; make realclean
+	rm -f $(DIRT) *.pid *.seds hostmon-osclients/*.seds
+

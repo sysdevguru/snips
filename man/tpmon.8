@@ -1,0 +1,81 @@
+.\"$Header: /home/cvsroot/snips/man/tpmon.8,v 1.0 2001/07/08 22:31:48 vikas Exp $"
+.\"
+.TH TPMON 8 "June 2001"
+.SH NAME
+tpmon \- TCP/IP network throughput measuring program
+.SH SYNOPSIS
+.B tpmon
+[
+.B \-a
+] [
+.B \-d
+] [
+.B \-o
+.I output-file
+] [
+.I config-file
+] [
+.B \-x
+]
+.SH DESCRIPTION
+.LP
+.B tpmon
+is part of the SNIPS network monitoring package, used for
+measuring the throughput (bits per second) to a remote networked host.
+.PP
+The program reads in the list of devices to test from a config file at startup
+and then tests the throughput by dumping data to the 
+.I discard
+port (TCP port 9) on the remote hosts. It keeps track of the amount of data
+sent and the time to send it, and calculates the throughput in bits
+per second.  If the measured throughput drops below the set threshold value
+(in the configuration file), then the
+.I severity
+for that device is incremented. However, the severity is not incremented beyond
+WARNING (this is because the intent of the program is more towards providing
+information than realtime monitoring. Furthermore, the thruput is a function
+of the network load, system load, etc. and can only be considered a rough
+estimate).
+.PP
+The program sleeps for POLLINTERVAL seconds between each run through the
+list of hosts. This should be set to about 2 hours or more (7200) to avoid
+loading the system and the network.
+.SH OPTIONS
+.TP 20
+.B \-a
+autoreload the configuration file if it is updated since last reload and if
+it is at least 1 minute old.
+.TP
+.B \-d
+selects verbose debugging output mode. Specify multiple times to increase the
+debug level.
+.TP
+.BI "\-o" " output file"
+Name of the file to which to write the output.  This file is 
+.I not
+in human-readable format, and is intended to be processed by the 
+.BR snipstv (1)
+display program.
+.TP
+.B \-x
+extension that is added to the program name to create the config file name
+and output file name.
+.TP
+.I config-file
+This file lists the hosts to be tested for throughput and the threshold
+levels. A sample config file is provided in the distribution.
+.\"------------------------------------
+.SH AUTHOR
+S. Spencer Sun 1992 (spencer@phoenix.princeton.edu).
+.SH CAVEATS
+.TP 1)
+The measured throughput is a function of the network load, the end system
+load and the intermediate hops. Hence, it can only be used as a rough
+estimate.
+.TP 2)
+The program should
+.I not
+be used for connecting to routers because of the additional CPU load on the
+router. Furthermore, the router might give lower priority to discard port
+connections. 
+.\"------------------------------------

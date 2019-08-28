@@ -1,0 +1,92 @@
+## ####### Makefile.head   for snips ########
+#
+#  $Header: /home/cvsroot/snips/Makefile.head,v 1.0 2001/07/08 22:26:36 vikas Exp $
+##
+# Set ROOTDIR here to a directory where everything will be installed
+# (etc, data).  'netconsole' does a chroot to this directory when it runs.
+#SRCDIR=	`pwd`
+#ROOTDIR=	/usr/local/snips
+#MANDIR =	$(ROOTDIR)/man
+#MANEXT = 	n
+#OPSMAIL =	ops@your.domain	# periodical condition reports
+
+# Set the SHELL else make will fail on good old IRIX... (sigh!!)
+SHELL=/bin/sh
+
+ROOTDIR=@ROOTDIR@
+SRCDIR=@SRCDIR@
+MANDIR=@MANDIR@
+MANEXT=@MANEXT@
+IRISETC=@IRISETC@
+
+OPSMAIL=@OPSMAIL@
+ADMINMAIL=@ADMINMAIL@
+PERL=@PERL@
+
+OS_LIBS=@OS_LIBS@
+OS_CFLAGS=@OS_CFLAGS@
+
+AR=@AR@
+RANLIB=@RANLIB@
+INSTALL=@INSTALL@
+INSTALLFLAGS=-o iris -g wheel
+
+#	BINDIR		directory for installing executables
+#	ETCDIR		location of configuration files
+#	PIDDIR		where programs create their pid files and error files
+#	DATADIR		where datafiles for monitoring programs are created
+#	INITDIR		dir for startup init scripts (SysV style init.d)
+#	MSGSDIR		for message files that the snips display shows in
+#			in the 'messages' sub-window
+#	EXAMPLESDIR	directory to store example config files
+#	DEVICEHELPDIR	dir for storing helpfiles for snipsweb
+#	RRD_DBDIR	directory to store RRD data files
+#	CGIDIR		dir to install the snipsweb CGI scripts
+#	HTMLDIR		dir to install the snipsweb html files.
+#
+BINDIR= 	$(ROOTDIR)/bin
+DATADIR=	$(ROOTDIR)/data
+ETCDIR=		$(ROOTDIR)/etc
+PIDDIR=		$(ROOTDIR)/run
+INITDIR=	$(ROOTDIR)/init.d
+MSGSDIR=	$(ROOTDIR)/msgs
+RRD_DBDIR=	$(ROOTDIR)/rrddata
+EXAMPLESDIR=	$(ETCDIR)/samples
+DEVICEHELPDIR=	$(ROOTDIR)/device-help
+CGIDIR=		$(ROOTDIR)/web/cgi
+HTMLDIR=	$(ROOTDIR)/web/html
+
+## RRD specific defines (http://www.caida.org)
+#RRDCFLAGS = "-DRRDTOOL"
+RRDCFLAGS = @RRDCFLAGS@
+#RRDLIBDIR = "/usr/local/rrd/lib"
+RRDLIBDIR = @RRDLIBDIR@
+# RRDLIBS must be AFTER -lsnips
+#RRDLIBS = -L/usr/local/rrd/lib -lrrd
+RRDLIBS = @RRDLIBS@
+
+##
+# SNIPS specific definitions:
+#	-DSNIPS		Always defined.
+#  	-DNOMULTIPING	If you dont want to use 'multiping'.
+#	-DRRDTOOL	If you want to compile RRDtool support
+#
+SNIPSDEFS =	-DSNIPS  $(RRDCFLAGS)
+
+#
+#'GCC' earlier than 2.x might fail on Sparc
+#	-DDEBUG
+#
+CC = @CC@
+CFLAGS = @CFLAGS@ $(SNIPSDEFS) $(OS_CFLAGS) -I$(SRCDIR)/include
+LIBS = @LIBS@ -L$(SRCDIR)/lib $(OS_LIBS) -lsnips $(RRDLIBS)
+YACC = @YACC@
+
+##
+# Following is so that all the sub-Makefile's can do a rm $(DIRT)
+# in their 'clean'
+
+DIRT = $(OBJS) $(TARG) *.o core a.out
+
+##  #######   END Makefile.head   ########  ##
+

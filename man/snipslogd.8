@@ -1,0 +1,149 @@
+.\" $Header: /home/cvsroot/snips/man/snipslogd.8,v 1.0 2001/07/08 22:31:48 vikas Exp $
+.\"
+.TH SNIPSLOGD 8 "June 2001"
+.SH NAME
+snipslogd \- SNIPS event logging daemon
+.SH SYNOPSIS
+.B snipslogd
+[
+.B \-d
+] [
+.B \-e
+.I output-error-filename
+] [
+.B \-f
+.I config-filename
+]
+.SH OPTIONS
+.TP
+.B \-d
+For debug mode. Will not daemonize and writes errrors to terminal.
+.TP
+.B \-e 
+.I <errorfile>
+For writing out errors to. Default is \fI ETCDIR/snipslogd.errors\fR
+.TP
+.B \-f 
+.I <config filename>
+Location of the configuration file. Default is \fI ETCDIR/snipslogd.cf\fR
+.SH DESCRIPTION
+.LP
+The
+.I snipslogd
+daemon logs SNIPS events (as text lines) to the files specified in the config
+file based on the loglevel of the event and the file specified in the config
+file (similar to the Unix \fIsyslogd\fR program.
+Alternately, it can open a pipe to a process and run that process instead of
+writing to a file.
+.PP
+It only logs
+.I CHANGES
+in severity levels of the events- it is important to note that it does not
+log in each pass of the monitor since this information is redundant. A log
+entry is made the first time a device goes from 'Info' to 'Warning' mode, and
+from 'Warning' to any other mode, but it is unnecessary to log an entry in
+each pass.
+.PP
+The
+.B snipslogd
+daemon listens on a UDP port (5354) for the various snips monitors to send
+it EVENT structures.
+Sending a HUP signal to the server closes all streams currently open, and
+reopens them. This is useful if you move the old log files every night
+or so.
+.PP
+For security purposes, only the hosts (IP addresses) specified in the
+configuration file are allowed to send log messages (see CAVEATS below).
+.PP
+.B NOTE:
+Since an
+.I event
+in SNIPS is generally generated only when the severity of an event
+.IR changes ,
+you might not see any events logged until such a change in severity occurs
+(restarting a SNIPS monitor will generate log messages- useful for testing).
+You can test logging by the
+.B snipslogtest
+program provided with the source distribution.
+.\"
+.SH DESIGN CONSIDERATIONS
+.LP
+The following are important 'features' about
+.B snipslogd
+that should be kept in mind while logging and running programs through it:
+.RS
+.TP 3
+1.
+Security is implemented by allowing only a select list of IP addresses
+to log (specified in the configuration file). The IP address of the
+host sending the packets is verified using the 
+.IR recvfrom (2)
+system call. Also see CAVEATS below.
+.TP 3
+2.
+Since the sockets used are of the UDP type, datagrams can be lost if
+too many events are sent to the daemon at the same time. However, since
+the monitors only log an event when its severity changes, this is usually not
+a problem. Additionally, a small delay is inserted by
+.I eventlog()
+(used by the clients) after sending a batch of log messages to avoid
+overflowing the daemon with too many messages.
+.TP 3
+3.
+The daemon does not
+.I fork(2)
+off a child for each packet that comes in. It processes each event 
+itself. Thus,if you are piping the output to a program 
+(instead of logging to a file), then make sure that the program being 
+run does its main procesing in the background and returns control to
+the snipslogd daemon as soon as possible.
+.I i.e.
+the various output programs being executed are responsible for doing
+their own "fork-ing", the daemon will not do it for them, and might
+loose other incoming log packets if the piped process does not release the
+.I stdin
+(it uses the
+.IR popen (3)
+call).
+.TP 3
+4.
+The hostname on which the 
+.I snipslogd
+daemon runs, is read from the global config file -
+.I snips.conf
+which is located in /etc/ or under SNIPSHOME/etc/
+.TP 3
+5.
+The library subroutine
+.I eventlog()
+does not retry logging for RETRY_REOPEN seconds (set to 60 secs) if it
+fails to log to snipslogd.
+.RE
+.PP
+A sample config file is provided with the distribution.
+.\"
+
+##
+## Give full pathnames in filenames since the daemon changes dir.
+##
+## SENDER	LEVEL		LOGFILE or PIPEFILE
+##
+*		critical	/snips/logs/log-critical
+nsmon		error		/snips/logs/log-error
+test		warning		/snips/logs/log-warning
+*		info		/snips/logs/log-info
+#
+pingmon		critical	|/snips/bin/beeper
+.fi
+.RE
+Comments begin with a '#' and sender names can be specified as '*' to
+indicate a wildcard. Keep in mind that an event is logged to all streams
+with a severity lower than its severity/loglevel. Thus, in the above example,
+events with a loglevel of ERROR will be logged to all the 3 files
+.I log-info, log-warning & log-error.
+.\"
+.SH CAVEATS
+Logging is restricted to the hosts listed in the configuration file.
+However, any user can send log messages from a permitted host, since there 
+is no authentication using passwords, etc (similar to
+.IR syslogd ).

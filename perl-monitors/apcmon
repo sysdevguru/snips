@@ -1,0 +1,373 @@
+#!/usr/local/bin/perl -w
+#
+# $Header: /home/cvsroot/snips/perl-monitors/apcmon,v 1.0 2001/07/09 04:33:20 vikas Exp $
+#
+# Monitor an APC SmartUPS. Part of the SNIPS network monitoring package.
+#
+# AUTHOR:
+#	Cyrus Rahman (cr@jcmax.com), Dec 1996
+#	Updated for SNIPS  (vikas)
+
+
+# Logic extracted from the "apcd"  daemon.
+#
+# If a file named 'apc_shutdown' exists in confg file directory, will ask the
+# UPS to suspend itself after the grace period.
+#
+#####################
+# 		The APC serial protocol
+# Cable:
+# 	Require a simple 3 wire cable connected as follows:
+#
+#		PC (9 pin)	APC
+#		 2 RxD		 2
+#		 3 TxD		 1
+#		 5 GND		 9
+#
+# The APC SmartUPS uses a simple ASCII protocol at 2400 baud, 8N1. Your
+# computer sends a character to the UPS and it answers back with an
+# ascii string terminated with a CR/LF.
+# A protocol description is given in the file apc-info
+##
+use strict;
+use vars qw ( $debug $devcount $OkData %UPSCMDS $snipsroot $etcdir
+	      @devicename @deviceaddr @maxsev @varname @varunits
+	      @nominal @wlevel @elevel @clevel
+	    );
+
+BEGIN {
+  $snipsroot = "/usr/local/snips"  unless $snipsroot;	# SET_THIS
+  push (@INC, "$snipsroot/etc"); push (@INC, "$snipsroot/bin");
+  require "snipsperl.conf" ;		# local customizations
+}
+
+use SNIPS;
+
+$s_pollinterval = 60;      		# Seconds to sleep between tries.
+$debug = 0;				# debug for this file
+$devcount = 0;
+
+# APC Smart UPS commands, by Jorg Wunsch, Dresden and Ty Hoeffer
+#  <joerg_wunsch@interface-business.de> & <pth3k@galen.med.virginia.edu>
+# This is an associative array of the command strings. Each of these maps
+# into a configuration file keyword.
+#
+%UPSCMDS =
+    (
+     'UPS_CMD_INCR',    '+',
+     'UPS_CMD_DECR',    '-',
+     'UPS_CMD_MODEL',   (ord('a') & 0x1F),
+     'UPS_CMD_TURNON',  (ord('n') & 0x1F),
+     'UPS_CMD_XXX1',    (ord('z') & 0x1F),
+     'UPS_CMD_PANEL',   'A',
+     'UPS_CMD_BATTERY', 'B',
+     'UPS_CMD_TEMP',    'C',
+     'UPS_CMD_XXX3',    'D',
+     'UPS_CMD_AUTOTEST', 'E',
+     'UPS_CMD_FREQ',    'F',
+     'UPS_CMD_XXX4',    'G',
+     'UPS_CMD_SHUT_GRACE',  'K',
+     'UPS_CMD_LINE',    'L',
+     'UPS_CMD_MINLINE', 'M',
+     'UPS_CMD_MAXLINE', 'N',
+     'UPS_CMD_OUTPUT',  'O',
+     'UPS_CMD_POWER',   'P',
+     'UPS_CMD_STATUS',  'Q',
+     'UPS_STATUS_STBY',  4,
+     'UPS_STATUS_ON',    8,
+     'UPS_STATUS_PWRF',  0x10,
+     'UPS_STATUS_BLOW',  0x40,
+     'UPS_CMD_DUMB',    'R',
+     'UPS_CMD_SELFT1',  'U',
+     'UPS_CMD_VERS',    'V',
+     'UPS_CMD_SELFT2',  'W',
+     'UPS_CMD_XXX5',    'X',
+     'UPS_CMD_SMART',   'Y',
+     'UPS_CMD_SHUT_IMM', 'Z',
+     'UPS_CMD_SHOW_CMDS', 'a',
+     'UPS_CMD_FIRMWARE',  'b',
+     'UPS_CMD_LOCALID',   'c',
+     'UPS_CMD_RETTHRESH', 'e',
+     'UPS_CMD_FILL',      'f',
+     'UPS_CMD_NBATTERY',  'g',
+     'UPS_CMD_XXX6',      'j',
+     'UPS_CMD_ALDELAY',   'k',
+     'UPS_CMD_LOWXFR',    'l',
+     'UPS_CMD_MDATE',     'm',
+     'UPS_CMD_ID',        'n',
+     'UPS_CMD_NLINE',     'o',
+     'UPS_CMD_SHUTDELAY', 'p',
+     'UPS_CMD_LOWB_WARN', 'q',
+     'UPS_CMD_SHUTRETURN', 'r',
+     'UPS_CMD_SENSITIVITY', 's',
+     'UPS_CMD_UPXFR',      'u',
+     'UPS_CMD_REPLDATE',   'x',
+     'UPS_CMD_COPYRIGHT',  'y',
+     'UPS_CMD_XXX7',       'z',
+     'UPS_RES_OK',         "OK",
+     'UPS_RES_NA',         "NA",
+     'UPS_RES_SM',         "SM",
+     'UPS_RES_BYE',        "BYE",
+     'UPS_RES_NO',         "NO",
+     'UPS_RES_PROG',       "PROG",
+     'UPS_EV_POWER',       '!',
+     'UPS_EV_PWRBACK',     '\$',
+     'UPS_EV_BATLOW',      '%',
+     'UPS_EV_BATUP',       '+',
+     'UPS_EV_TURNON',      '?'
+   );
+
+##
+# Read the config file.
+sub readconf {
+  my ($event, $ups_name, $port);
+  my $count = 0;
+  my $lineno = 0;
+
+  if ($debug == 0 && $libdebug > 0) {
+    $debug = $libdebug;
+    $libdebug = 1 if ($debug > 1) ;
+  }
+
+  open(CONFIG,"<$s_configfile")||die("Couldn't find $s_configfile, exiting");
+  my $datafd = open_datafile($s_datafile, "w");
+  $event = new_event();
+
+  while(<CONFIG>)
+  {
+    ++$lineno;
+    chomp;
+    if(/^\s*\#/) {next;}   # skip comments
+    if(/^\s*$/) {next;}   # skip blank lines
+
+    if (/^(sleepinterval)\s+(\d+)\s*$/i || /^(pollinterval)\s+(\d+)\s*$/i) {
+      $s_pollinterval = $2;
+      next;
+    }
+    
+    if (/^\s*RRDTOOL\s+ON/i) { $SNIPS::dorrd = 1; next; }
+
+    if (/PORT\s*(\S+)/i)  { $port = $1; next; }
+
+    if (/UPSNAME\s*(\S+)/i || /UPS_NAME\s*(\S+)/i)  {
+      $ups_name = $1;
+      next;
+    }
+
+    # variable  normal-value  units  wLevel eLevel cLevel
+    if (/\s*(\S+)\s+(\d+|-)\s+(\S+)\s+(\d+)\s+(\d+)\s+(\d+)\s*/)
+    {
+      if (!$ups_name) {
+	print "UPS_NAME not defined at line $lineno\n";
+	exit 1;
+      }
+      ++$count;
+
+      ($varname[$count], $nominal[$count], $varunits[$count],
+       $wlevel[$count], $elevel[$count], $clevel[$count]) =
+	 ($1, $2, $3, $4, $5, $6);
+
+      alter_event($event, 'apcmon', $ups_name, $ups_name, undef,
+		  $varname[$count], $varunits[$count]);
+      write_event($datafd, $event);
+      next;
+    }
+
+    print "[$lineno] Ignoring illegal line: $_ \n";
+
+  }	# end while(CONFIG)
+
+  # a generic variable indicating if the data could be polled or not.
+  ++$count;
+  $varname[$count] = "UPSdata";
+  $varunits[$count] = "Avail";
+  alter_event($event, $s_sender, $ups_name, $ups_name, undef,
+	      $varname[$count], $varunits[$count]);
+  write_event($datafd, $event);
+
+  close(CONFIG);
+  close_datafile($datafd);
+  $devcount = $count;
+
+  if ($devcount == 0) { die("Nothing to monitor in $s_configfile, exiting") };
+
+  if ($debug) {
+    print "Device list is:\n";
+    for ($count = 1; $count <= $devcount; ++$count) {
+      print "\t$devicename[$count]\n";
+    }
+  }
+
+  ## now open the serial port
+  if (!defined($port)) {
+    die("PORT not defined in apcmon confg\n");
+  }
+    
+  -c $port || die("Could not find UPS serial port $port, exiting");
+  require "fcntl.ph";
+  # sysopen(PORT, $port, &O_RDWR|&O_EXCL, 0) || die("Cannot open UPS port");
+  # close(PORT) if (defined PORT);
+  open(PORT, ">+ $port") || die("Cannot open UPS serial port $port: $!\n");
+
+  system("stty 2400 -opost -xcase -isig icanon -echo -istrip  icrnl igncr -ixon -parenb cs8 clocal < $port > $port");
+
+}	# sub readconf()
+
+
+#
+## Check state of each variable. Return  status, value, thres, maxsev
+##
+#
+sub dotest {
+  my ($event, $i) = @_;
+  my ($status, $value, $thres, $maxsev);
+  my ($Querycmd, $Query, $delta, $nbytes);
+
+  # See if we should shut the APC UPS down.
+  # We only do the power down sequence if we can unlink the
+  # shutdown file (to prevent looping shutdowns).
+  if (-e "$etcdir/apc_shutdown") {
+    if (unlink("$etcdir/apc_shutdown") == 1) {
+      # Turns off UPS.  Use a 'S' to suspend it instead (so that it
+      # will come back up when the power is restored).
+      if ($debug) {print "*****Suspending UPS*****\n"};
+      sleep 1;
+      syswrite(PORT, $UPSCMDS{'UPS_CMD_SHUT_GRACE'}, 1); sleep 1;
+      syswrite(PORT, $UPSCMDS{'UPS_CMD_SHUT_GRACE'}, 1); sleep 1;
+    }
+  }
+
+  # Measure the variable
+  if ($debug) {print "(debug): Checking $varname[$i]\n"};
+
+  if ($varname[$i] eq "UPSdata") {
+    my $retval = $OkData;
+    $OkData = 0;	# reset
+    return ($retval, $retval, 0, $E_CRITICAL);
+  }
+
+# Several indicators are derived from the status bytes:
+#
+# Status: 0 (0x08) - On, line power;
+#	  1 (0x10) - On, no line power;
+#	  2 (0x40) - On, no line power & battery low;
+#	  3 (0x00) - off (standby), line power available & charging
+#	  4 (0x04) - off (standby), no line power
+#
+# Q			Status byte 8 bits long.
+#                               - 08  On-line LED ON
+#				- 10  On Battery LED ON
+#	                        - 18  Both LEDs ON
+#                               - 02  UPS in shut down state, waiting for AC
+#
+#                              0 - If 1, UPS is in calibration
+#                              1 - If 1, UPS is sleeping
+#                              2 -  
+#                              3 - If 1, AC is here
+#                              4 - If 1, UPS is running on battery
+#                              5 -
+#                              6 - If 1, Battery is low
+#                              7 - 
+
+  # Query string
+  if ($varname[$i] =~ /OnLine|AcPresent|OnBattery|BatteryLow/i)
+  {
+    $Querycmd = "UPS_CMD_STATUS";
+  }
+  else {
+    $Querycmd = "UPS_CMD_" . $varname[$i];
+    $Querycmd =~ tr/a-z/A-Z/;    # make uppercase
+  }
+
+  if ($debug) {print "Query is $Querycmd\n"};
+  $Query = $UPSCMDS{$Querycmd};     # extract string from assciative array
+  if ($debug) {print "Sending $Query\n"};
+  syswrite(PORT, $Query, 1);
+
+  $value = 0;
+  alarm(5);
+  $nbytes = sysread(PORT, $value, 256);
+  alarm(0);
+  if ($nbytes) {
+    $OkData = 1;
+    chop $value;
+    if ($debug) {print "Got value $value\n"};
+    $value =~ s/^[!$%+?]*//g;
+  }
+  else {
+    if ($debug) {print "Got no returned data\n"};
+
+    # Make sure UPS is in smart mode.  Obviously it won't be the first
+    # time the read fails, but failing to init the first variable
+    # one time shouldn't cause any trouble.  This way we check each
+    # time, so if a new ups is brought up or a cable is connected
+    # after the daemon starts all will work out.
+    syswrite(PORT, "Y", 1);
+    alarm(5);
+    $nbytes = sysread(PORT, $value, 256);
+    alarm(0);
+    
+    return (0, 0, 0, $E_ERROR);
+  }
+  
+  # extract the status from the boolean values
+ SWITCH: {
+    $varname[$i] =~ /OnLine/i && do {
+      $value = hex($value);
+      $value &= 0x02;
+      $value = ($value == 0) ? 1 : 0;
+      last SWITCH;
+    };
+    $varname[$i] =~ /AcPresent/i && do {
+      $value = hex($value);
+      $value &= 0x08;
+      $value = ($value != 0) ? 1 : 0;
+      last SWITCH;
+    };
+    $varname[$i] =~ /OnBattery/i && do {
+      $value = hex($value);
+      $value &= 0x10;
+      $value = ($value != 0) ? 1 : 0;
+      last SWITCH;
+    };
+    $varname[$i] =~ /BatteryLow/i && do {
+      $value = hex($value);
+      $value &= 0x40;
+      $value = ($value != 0) ? 1 : 0;
+      last SWITCH;
+    };
+  }
+  
+  # Calclulate delta
+  if ($nominal[$i] ne '-') {$delta = &absolute($value - $nominal[$i]); }
+  else {$delta = $value; }	# test real value
+  
+  ($status, $thres, $maxsev) = 
+    &calc_status ($delta, $wlevel[$i], $elevel[$i], $clevel[$i]);
+  
+  if ($debug) {print "(debug): Status $status, MaxSev= $maxsev\n";}
+  
+  return ($status, $value, $thres, $maxsev);
+
+}	# end &dotest()
+
+sub noresponse {
+  if ($debug) {print "No Response alarm\n"};
+  $OkData = 0;
+}
+
+sub absolute {
+  my ($val) = @_;
+  if ($val < 0) {$val *= -1;}
+  return($val);
+}
+
+###
+### main
+###
+
+# Warn of unresponsive UPS.
+$SIG{'ALRM'} = "noresponse";
+
+&snips_main(\&readconf, undef, \&dotest);
+

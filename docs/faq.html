@@ -1,0 +1,253 @@
+<!DOCTYPE HTML PUBLIC "-//IETF//DTD HTML//EN">
+<!-- $Header: /home/cvsroot/snips/docs/faq.html,v 1.1 2001/08/05 14:19:30 vikas Exp $ -->
+<html>
+
+<head>
+<title>SNIPS FAQ</title>
+<style>
+<!--
+body         { background-color: White; font-family: Verdana, Arial, Helvetica, sans-serif; 
+               font-size: 10pt; list-style-type: square; margin-left: 50px; 
+               margin-right: 10px; margin-top: 10px }
+h1           { font-family: Arial, Helvetica, sans-serif; font-size: 18pt; font-weight: bold; 
+               margin-left: -10px }
+h2           { font-family: Arial, Helvetica, sans-serif; font-size: 14pt; font-variant: 
+               small-caps; font-weight: bold; background-color: Silver; 
+               margin-left: -10px }
+h3           { font-family: Arial, Helvetica, sans-serif; font-size: 12pt; font-weight: bold; 
+               background-color: Silver; margin-left: -10px }
+a:link       { text-decoration: none; color: blue }
+a:hover      { text-decoration: underline; color: red }
+-->
+</style>
+<meta name="GENERATOR" content="Microsoft FrontPage 4.0">
+<meta name="ProgId" content="FrontPage.Editor.Document">
+</head>
+
+<body bgcolor="#ffffff">
+
+<h1>SNIPS : Frequently Asked Questions (FAQ)</h1>
+<hr align="left" width="75%" color="#0000FF" noshade>
+<i>
+<p align="left">Last updated June 2001</i></p>
+<ol>
+  <li>General
+    <ul>
+      <li><a href="#gen0">What is SNIPS ?</a></li>
+      <li><a href="#gen1">How does SNIPS differ from NOCOL ?</a></li>
+      <li><a href="#gen2">How does SNIPS differ from MRTG ?</a></li>
+      <li><a href="#gen3">What is Fidelia's <i>Assurance</i>?</a></li>
+      <li><a href="#gen4">Where do I get SNIPS ?</a></li>
+      <li><a href="#gen5">What about support ?</a></li>
+      <li><a href="#gen6">Is snips Y2K compliant ?</a></li>
+    </ul>
+  </li>
+  <li>Installation
+    <ul>
+      <li><a href="#R0">What are the hardware requirements ?</a></li>
+      <li><a href="#R1">Should I run SNIPS as root ?</a></li>
+      <li><a href="#R2">I am getting lots of messages from <i>keepalive_monitors</i>
+        about restarting daemons</a></li>
+      <li><a href="#R3"><b>multiping</b> gives errors</a></li>
+      <li><a href="#R4">Nothing is being logged to <b>snipslogd</b></a></li>
+      <li><a href="#R5">Why do I get lots of sniplog messages when I restart a
+        monitor?</a></li>
+      <li><a href="#R6">Why do I get "time of day goes back, taking
+	      countermeasures" errors in my monitor logs?</a></li>
+    </ul>
+  </li>
+  <li>Miscellaneous
+    <ul>
+      <li><a href="#misc1">Can SNIPS handle SNMPv2 ?</a></li>
+      <li><a href="#misc2">How can I page myself when a device goes down ?</a></li>
+      <li><a href="#misc3">How do I get notified when a device comes back up ?</a></li>
+      <li><a href="#misc4">How do I get paged as soon as a device goes down?</a></li>
+      <li><a href="#misc5">Can I setup host or variable dependencies in SNIPS?</a></li>
+      <li><a href="#misc6">Where can I get an SSL Web server monitor?</a></li>
+      <li><a href="#misc95">Does SNIPS run on Windows NT ?</a></li>
+      <li><a href="#misc99">Who developed SNIPS ?</a></li>
+    </ul>
+    <p>&nbsp;</p>
+  </li>
+</ol>
+<hr width="75%" noshade>
+<h3>GENERAL</h3>
+<dl>
+  <dt><b><a name="gen0">What is SNIPS ?</a></b></dt>
+  <dd><font color="#AA0000">SNIPS</font> (System and Network Integrated Polling
+    Software) is a complete package for monitoring networks or Unix systems. It
+    can generate alarms based on thresholds, graph monitored data using RRDtool
+    (MRTG style) and generally offer all the functions that you would expect
+    from a monitoring package. It is being used in large ISP networks to monitor
+    as many as 1500+ devices. The most popular SNIPS monitors are&nbsp;&nbsp;
+    for TCP ports, ICMP (ippingmon), RPC (rpcpingmon), Unix systems (hostmon),
+    SNMP variables (snmpmon).</dd>
+  <dt>&nbsp;</dt>
+  <dt><a name="gen1"><b>How does SNIPS differ from NOCOL?</b></a></dt>
+  <dd>SNIPS is a complete rewrite of NOCOL (which was released in 1991 as
+    freeware also) and supports many enhanced features not available earlier (RRDtool
+    graphing support, more customizable monitors). The core has been rewritten
+    entirely and is better suited to future extensibility. It supports all the
+    monitors that were available in NOCOL, but uses a slightly different&nbsp;
+    and enhanced event data structure. These enhancements were necessary to
+    permit future enhancements in the product.
+    <p>If you are a current user of Nocol, SNIPS is a drop in replacement. You
+    can install SNIPS and then copy over all your existing NOCOL configuration
+    files without modifications. However, SNIPS allows additional keywords in
+    some monitors (rrd support, ippingmon more flexible, etc.) so you should see
+    if you want to add these keywords to your configuration files. Change your
+    mail aliases and /etc/services file to replace 'noclog' with 'snipslog'&nbsp;
+    and 'nocol' with 'snips' and you should be done.</p>
+  </dd>
+  <dt><b><a name="gen2">How does SNIPS differ from MRTG ?</a></b></dt>
+  <dd>SNISP&nbsp; is a <em>complete monitoring</em> package which detects
+    outages or errors on your devices and generate alarms/pages when this
+    happens. In addition, it also generates stores historical data in the MRTG 'rrdtool'
+    format, and can generate graphs similar to MRTG.</dd>
+  <dt>&nbsp;</dt>
+  <dt><a name="gen3"><b>What is Fidelia's <i>Assurance</i>?</b></a></dt>
+  <dd><i>Assurance</i> is a high performance, massively scalable performance
+    monitoring solution from <a href="http://www.fidelia.com">Fidelia, Inc.</a>
+    They granted time and support to the author for releasing SNIPS in the
+    public domain even while working at Fidelia on the development of their next
+    generation product (which supports distributed databases, collection and
+    storage, entirely web based NMS system, multi-tiered user security, etc.)</dd>
+  <dt>&nbsp;</dt>
+  <dt><a name="gen4"><b>Where do I get SNIPS</b></a></dt>
+  <dd>The distribution site is at <a href="http://www.netplex-tech.com/software/snips/downloads">http://www.netplex-tech.com</a>.
+    It can also be downloaded via ftp from <a href="ftp://ftp.navya.com/pub/">ftp.navya.com</a></dd>
+  <dt>&nbsp;</dt>
+  <dt><a name="gen5"><b>What about support ?</b></a></dt>
+  <dd>SNIPS is freeware, and hence no official support is available. However, it
+    is a popular product and you can send messages to the <b>snips-users@navya.com</b>
+    mailing list or search the Web using any popular Internet search engine (Altavista,
+    Excite) for your queries.<br>
+    You can also email queries to <a href="mailto:dev@navya.com">snips-support@navya.com</a>
+    which might grow larger in some distant future.</dd>
+  <dt>&nbsp;</dt>
+  <dt><a name="gen6"><b>Is snips Y2K compliant ?</b></a></dt>
+  <dd>Yes. All events are logged to <i>snipslogd</i> in the Unix timestamp
+    format, so the timestamps are not effected by the Y2K problem.</dd>
+  <dt>&nbsp;</dt>
+</dl>
+<hr width="75%" noshade>
+<h3>INSTALLATION</h3>
+<dl>
+  <dt><a name="R0"><b>What are the hardware requirements ?</b></a></dt>
+  <dd>Snips can run very comfortably on any Pentium-100 class Unix machine with
+    64MB of RAM and monitor several hundred devices. It is very lightweight in
+    design and implementation.<br>
+    <br>
+    There are existing SNIPS users who are monitoring 1500+ devices using a
+    Sparc Ultra-5.</dd>
+  <dt>&nbsp;</dt>
+  <dt><a name="R1"><b>Should I run snips as root ?</b></a></dt>
+  <dd><em>NO!</em> You should create a separate user such as 'snips'&nbsp; and
+    all monitors should be run by this user. The few monitors which require root
+    priveleges (such as pingmon or trapmon) are installed as suid root in the
+    snips bin/ directory.</dd>
+  <dt>&nbsp;</dt>
+  <dt><a name="R2"><b>I am getting lots of messages from <tt>keepalive_monitors</tt>
+    about restarting</b></a></dt>
+  <dd>Either your system's <tt>ps</tt> command is not listing the complete
+    program name and <tt>keepalive_monitors</tt> is trying to restart the
+    program since it thinks its down or else the monitor being restarted cannot
+    write the pid or data file and is dying (incorrect owner and permissions on
+    the <tt>snips/run</tt> directory).
+    <p>If the monitor is not running, then try running it in debug mode (most
+    monitors will take the <tt>-d</tt> option for running in debug mode). The
+    errors from these programs are written to the&nbsp; <tt>run/</tt><em>prog</em><tt>.error</tt>&nbsp;&nbsp;
+    file.</p>
+  </dd>
+  <dt><a name="R3"><b>multiping gives error <i>socket: Operation not permitted</i></b></a></dt>
+  <dd><b>multiping</b> requires a raw socket, and needs to be installed suid
+    root. You probably did not run <tt>make root</tt> while installing snips.
+    Check the ownership and permission of this program- it <em>must</em> show
+    mode <tt>-rwsr-x--x</tt> with owner root. If not, do the following:
+    <pre>		chown root multiping
+
+		chmod 4751 multiping
+	</pre>
+  </dd>
+  <dt><a name="R4"><b>Nothing is being logged to <i>snipslogd</i></b></a></dt>
+  <dd>Events are logged ONLY when their state <em>changes</em>. Thus, an event
+    will be logged to snipslogd if a device goes from info level to warning
+    level, etc.</dd>
+  <dt>&nbsp;</dt>
+  <dt><a name="R5"><b>Why do I get lots of sniplog messages when I restart a
+    monitor?</b></a></dt>
+  <dd>When any monitor starts, it sets the state of all devices to
+    'UNKNOWN'.&nbsp; After the first poll, it determines the actual state of the
+    devices&nbsp; and logs it to snipslogd since its a change in the event's
+    state. This information is important in snipslog since any intelligent log
+    file parser should know when a monitor restarts.</dd>
+  <dt>&nbsp;</dt>
+  <dt><a name="R6"><b>Why do I get "Warning: time of day goes back, taking
+	      countermeasures" errors?</b></a></dt>
+      <dd>This is coming from the system  <i>ping</i> used by 
+	hostmon-collector. The bug report from Redhat
+      is <a href="http://bugzilla.redhat.com/bugzilla/show_bug.cgi?id=37485">
+      http://bugzilla.redhat.com/bugzilla/show_bug.cgi?id=37485</a>.
+	You can avoid this error message by setting the value of
+	$ping in <i>snipsperl.conf</i> to multiping.
+  </dd>
+  <dt>&nbsp;</dt>
+</dl>
+<hr width="75%" noshade>
+<h3>MISC</h3>
+<dl>
+  <dt><a name="misc1"><b>Can snips handle SNMPv2 ?</b></a></dt>
+  <dd>SNIPS uses the latest CMU SNMP library which does support SNMPv2.</dd>
+  <dt>&nbsp;</dt>
+  <dt><a name="misc2"><b>How can I page myself when a device goes down?</b></a></dt>
+  <dd>Assuming that you have an alphanumeric pager and can page yourself using
+    email or any other perl script, you can page yourself on a particular event
+    by using snipslogd and piping the events to a simple script such as <tt>utility/beep_oncall</tt>.<br>
+    In addition to <b>snipslogd</b>, you can also run <tt>utility/notifier.pl</tt>
+    to page you.<br>
+    Paging software such as <a href="http://www.qpage.org">qpage</a> can be used
+    to do the actual paging.</dd>
+  <dt>&nbsp;</dt>
+  <dt><a name="misc3"><b>How do I get notified when a device comes back up ?</b></a></dt>
+  <dd>All monitors in snips log events to <tt>snipslogd</tt> based on the worst
+    of new severity or previous severity of an event.
+    <p>Hence, when a device goes down first, it will be logged at 'warning'
+    level. If it comes back up, it will be marked as up but will be logged at a
+    loglevel of 'warning' since that was the old severity. This mechanism allows
+    you to not only detect when a device goes critical, but also detect when the
+    device comes back up.</p>
+  </dd>
+  <dt><a name="misc4"><b>How do I get paged as soon as a device goes down ?</b></a></dt>
+  <dd>In order to avoid false alarms (and prevent operators from getting into
+    the habit of wait-and-it-will-go-away), SNIPS will escalate any events
+    severity gradually. If you want to get paged or notified as soon as a device
+    or variable changes, you can set alerts at the <i>Warning</i> level instead
+    of the <i>Critical</i> level.</dd>
+  <dt>&nbsp;</dt>
+  <dt><a name="misc5"><b>Can I setup host or variable dependencies in SNIPS?</b></a></dt>
+  <dd>The various displays do not handle dependencies at this time, but is on
+    the wish list.</dd>
+  <dt>&nbsp;</dt>
+  <dt><a name="misc6"><b>Where can I find an SSL web monitor?</b></a></dt>
+  <dd>This monitor is simple to write but requires linking against an SSL
+    library which might be subject to US export regulations and hence is not
+    available at this time.</dd>
+  <dt>&nbsp;</dt>
+  <dt><a name="misc95"><b>Does snips run on windows NT ?</b></a></dt>
+  <dd>SNIPS currently only runs on Unix platforms and there are currently no
+    plans to port it to Windows platforms.</dd>
+  <dt>&nbsp;</dt>
+  <dt><a name="misc99"><b>Who maintains SNIPS ?</b></a></dt>
+  <dd>This software is currently maintained by <a href="mailto:vikas@navya.com">Vikas
+    Aggarwal</a> and is copyright Netplex Technologies, Inc.&nbsp; The SNMP
+    library is Copyright Carnegie-Mellon University. Additionally, there are
+    contributions by many users included as part of the core distribution, and
+    this information is in the contributed files.</dd>
+</dl>
+<hr align="center" width="50%" size="1" color="#0000FF">
+<p align="center"><font face="Arial,Helvetica"><span style="color: rgb(0,0,255); font-weight: bold; font-variant: small-caps; letter-spacing: 2px"><a href="mailto:vikas@navya.com">Feedback</a></span></p>
+</font>
+
+</body>
+
+</html>

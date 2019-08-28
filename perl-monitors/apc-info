@@ -1,0 +1,117 @@
+                       The APC serial protocol
+
+(extracted from apcd.h)
+
+
+A few words regarding the APC serial protocol
+
+Firstly, the cable:
+
+You will need a simple 3 wires cable connected as follows:
+
+PC (9 pin)     APC
+ 2 RxD          2
+ 3 TxD          1
+ 5 GND          9
+
+Communication protocol which is used for controlling the APC SmartUPS
+is very simple ASCII protocol.
+The serial communication is 2400 Bd, 8N1
+
+Basically, your computer send a character to the UPS and UPS answer
+with the requested information in the form of the ASCII string terminated
+with CR/LF.
+In some cases, the UPS answer is the action like battery test etc.
+
+There are two exceptions. If the UPS is switching to the battery, the
+characters "!!" are sent to the computer. If the UPS is switching back
+on-line, the charater '$' is sent to the computer. If battery is low,
+'%' is sent to the computer. When battery is recharged to more than 15%,
+'+' is sent to the computer.
+
+The protocol description is not based on informations obtained from APC.
+I tried to analyse the protocol on RS-232 port, so my description
+is not complete.
+
+Command are:
+
+	SEND			ANSWER
+
+	f			Battery status in %   100 = fully loaded
+	N			Line minimum voltage (V)
+	M			Line maximum voltage (V)
+	Q			Status byte 8 bits long.
+                             - 08  On-line LED ON
+                             - 10  On Battery LED ON
+                             - 18  Both LEDs ON
+                             - 02  UPS in shut down state, waiting for AC                  
+
+                             0 - If 1, UPS is in calibration
+                             1 - If 1, UPS is sleeping
+                             2 -  
+                             3 - If 1, AC is here
+                             4 - If 1, UPS is running on battery
+                             5 -
+                             6 - If 1, Battery is low
+                             7 - 
+
+
+	P			UPS load (VA)
+	F			Line frequency (Hz)
+	L			Line voltage (V)
+	O			Output voltage (V)
+	C			Inside temperature (Celsius degrees)
+	B			Battery voltage
+
+
+Some signals for UPS control
+
+	Y                       Attention
+	W			Switch on battery
+	X			Switch back on-line
+	A			Lights test
+	U			Power failure test
+	c			UPS identification ???
+
+One very special signal
+
+	Z ~1500ms pause Z	Switch off the UPS completely and imediately
+
+
+Special thanks to Kevin D. Smolkowski (kevins@tigger.oslc.org)
+ who observed other control codes
+
+     D                       Runtime calibration   ON/OFF
+     V                       Firmware revison
+     c                       UPS Identification
+     k                       UPS Warning (Power Fail, Power Fail + 30,
+                                 Low Battery, OFF 
+     l                       Low transfer point
+     m                       Manufacture date
+     n                       UPS serial number
+     o                       Nominal UPS output
+     p                       UPS turn off delay "020" "180" "300" "600" Cycles
+     q                       Low battery signal time "02" "05" "07" "10" Cycles
+     r                       Wakeup Delay
+     s                       Sensitivity "H" "M" "L"
+     u                       High transfer point
+     x                       Battery replacement date
+     y                       Brand "(C) APCC"
+     7                       Option switch settings (Hex) 0F 0E 0C 08 00
+     
+     -                       Change prev. settings
+
+                             To change UPS name   c - /n newname /n
+
+
+Further codes, not fully tested
+
+     S                       Soft shutdown, UPS will go back on-line when AC
+                                is back
+     @222                    Soft shutdown, UPS will NOT go back when AC is back
+     U                       Power failure test
+     G                       Return 'T' if there was a power failure 
+                             Return 'S' if there was not a power failure
+                             UPS Test will reset the value to the 'S'
+     K 1500ms pause K        Switch off UPS completely after delay
+

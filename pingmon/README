@@ -1,0 +1,34 @@
+For IP, you might want to use 'multiping' instead (in the support dir).
+For RPC hosts, use support/rpcping.
+
+Locations and syntax's for various pings...
+----------------------------------------
+SunOS 4.1.4
+	/usr/etc/ping -s (verbose)  host  pktsize  count
+
+SunOS 5.5
+	/usr/sbin/ping -s (verbose) host pktsize count
+
+HP-UX 9.x
+	/usr/sbin/ping  -n count OR
+	/usr/sbin/ping  host  pktsize  count
+
+ULTRIX 4.4
+	/etc/ping host pktsize count
+
+AIX 2
+	/etc/ping -c cnt  -s pktsize host
+
+FreeBSD 2.1.0-RELEASE
+	/sbin/ping -c count  -s pktsize  host
+
+Linux 1.2.13
+	/bin/ping -c count  -s pktsize  host
+
+IRIX 5.3
+	/usr/etc/ping -c count -s pktsize host
+
+OSF1 V4.0
+	/usr/sbin/ping -c cnt -s pktsize host
+
+

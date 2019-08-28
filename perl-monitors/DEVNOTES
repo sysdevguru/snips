@@ -1,0 +1,25 @@
+		     DEV NOTES FOR perl-monitors
+
+
+1. Some monitors are rewriting the entire datafile each time, and need
+   to 'forget' devices, so they cannot call the generic snips_main().
+
+2. Enhance SNMPgeneric to multi-task. Merge snmpmon with this.
+
+3. snmpmon-collector and hostmon-collector dont use the name+IP for the
+   monitored devices (like in other monitors). The 'comment' field in
+   the monitored data is stored in the 'host.name' field of the events.
+   (this comment is usually the disk partition, or interface number).
+
+4. snmpmon and hostmon are not inserting the TIMESTAMP from the data
+   files into the event structure, so the timestamp in the event
+   structure is a little skewed.
+
+5. Because snmpmon and hostmon create event entries during the first
+   poll (from existing data and not from all the configuration data),
+   a HUP signal does not work as expected since there are no events to
+   copy on rereading the cnfig file.
+
+6. snmpwalk and snmpget have huge overheads since they have to load the
+   mib file with each invocation. Modify to read parameters from stdin
+   and run in a loop.

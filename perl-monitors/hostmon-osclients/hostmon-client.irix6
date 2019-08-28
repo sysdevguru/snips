@@ -1,0 +1,277 @@
+#!/usr/local/bin/perl
+
+#           ########  hostmon-client.irix6  #######
+#
+# IRIX 6.x  (contributed by Frank Crawford <frank@ansto.gov.au> )
+#
+## $Header: /home/cvsroot/snips/perl-monitors/hostmon-osclients/hostmon-client.irix6,v 1.0 2001/07/09 04:40:14 vikas Exp $
+#
+# This file is appended by 'hostmon-client'
+#
+use strict;
+use vars qw($debug $onfscalls $onfsretries $otimeo);
+
+###
+# All the following functions must print out the following:
+#   		VARIABLE VALUE UNITS COMMENT
+# For variables that are part of a varying maximum, normalize it and give
+# the percentage instead (e.g. free memory, etc.)
+###
+###
+
+### csh% uptime
+#      4:26am  up 10:09,  2 users,  load average: 0.01, 0.07, 0.00
+#
+sub uptime {
+  my $cmd = "uptime";
+  my $value = -1 ;
+  my $uptime = 0;    
+  open (CMD, "$cmd |");
+  while (<CMD>) {
+    $debug &&  print STDERR "(debug)uptime: $_" ;
+    chomp;
+    if ( /^.*up\s+(\d+)\s+day.*,\s*(\d+)\s*mins,.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ )
+    {
+      $uptime = ($1 * 1440) + $2;
+      printf "Uptime %d mins\n", $uptime;
+      printf "Load5 %d load-5min\n", int($4) ;
+      last ;
+    }elsif ( /^.*up\s+(\d+)\s+day.*,\s*(\d+):(\d+),.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ ) {
+      $uptime = ($1 * 1440) + ($2 * 60) + $3;
+      printf "Uptime %d mins\n", $uptime;
+      printf "Load5 %d load-5min\n", int($5) ;
+      last ;
+    }
+    elsif ( /^.*up\s+(\d+):(\d+),.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ ) {
+      $uptime = ($1 * 60) + $2;
+      printf "Uptime %d mins\n", $uptime;
+      printf "Load5 %d load-5min\n", int($4) ;
+      last ;
+    }
+    elsif ( /^.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ ) {
+      printf "Load5 %d load-5min\n", int($2) ;
+      last ;
+    }
+    else { print STDERR "(debug)uptime() : command format not understood.\n"; }
+  }	
+  close (CMD);
+  
+  #    print "Load 9999 load UnParseableInput\n";
+}
+
+### 
+# pstat NOT SUPPORTED ON IRIX
+# use swap -s
+#
+#total: 77.16m allocated + 1.78g add'l reserved = 1.86g bytes used, 2.35g bytes available
+#
+sub pstat {
+  my $cmd = "swap -s";
+  
+  open(CMD, "$cmd |");
+  while (<CMD>) {
+    if ($debug) { print STDERR "(debug)pstat: $_" ; }
+    
+    chomp;
+    
+    if ( /^.*, (\d+\.\d+)m bytes available$/ ) {
+      printf "SwapSpace %d MBytes\n", int($1);
+    } elsif ( /^.*, (\d+\.\d+)g bytes available$/ ) {
+      printf "SwapSpace %d MBytes\n", int($1 * 1024);
+    }
+  }
+  close(CMD);
+}				# end &pstat()
+
+### nfsstat
+# Have to calculate deltas in each pass since the nfsstat command does not
+# give us 'rate' over a time period.  
+# STORE THE OLD VALUES IN EACH PASS AND CALC DELTA EACH TIME.
+#
+# DWN: Additionally, nfsstat on BSDI does not yet give the ability to
+# restrict the output to client/server or RPC/NFS, so we have to look
+# at the header lines.
+#
+# Timeouts are not the same as retries!  Timeouts to reflect problems 
+# communicating to the server (nfs server not responding), which in turn
+# is indicated by successive retries on a NFS request.  The cause for the
+# retry may be local socket blockage, network loss, or a busy server.
+#
+# sunos4-vikas> nfsstat -rc
+#
+# Client rpc:
+# calls    badcalls retrans  badxid   timeout  wait     newcred  timers
+# 7915078  52102    0        345      52073    0        0        7164     
+#
+sub nfsstat {
+  my $cmd = "/usr/etc/nfsstat";
+  my ($dcalls, $dtimeo, $dretries, $tvalue, $rvalue);
+  open (CMD, "$cmd -rc |");	# '-rc' for client related data only
+  while (<CMD>) {
+    chomp;
+				# rate =  timeout/calls
+    if (/^\s*(\d+)\s+\d+\s+(\d+)\s+\d+\s+(\d+).*$/ )  {
+      $debug && print STDERR "(debug)nfsstat: $_\n" ;
+      
+      $dcalls = $1 - $onfscalls ; $onfscalls = $1 ;
+      $dretries = $2 - $onfsretries ; $onfsretries = $2 ;
+      $dtimeo = $3 - $otimeo ; $otimeo = $3 ;
+      last ;			# no more lines
+    }
+  }				# end (while)
+  close (CMD);
+  
+  if ($dcalls == 0) { $tvalue = 0 ; $rvalue = 0;}
+  else {
+    $tvalue = int($dtimeo * 100 / $dcalls); # calc timeout rate
+    $rvalue = int($dretries * 100 / $dcalls); # calc retry rate
+  }
+  
+  if ($debug) { print STDERR "(debug)nfsstat: $dtimeo/$dcalls\n" ;}
+  print "NFStimeouts $tvalue %timeouts\n";
+  print "NFSretries $rvalue %retries\n";
+  
+}				# end &nfsstat()
+
+## df
+# Extract space availability stats. Printing out available MBytes and
+# percent full (together they make sense).
+# Note that this command prints out a number of lines with same variable
+# name (one for each disk). The hostmon server picks out the worst of
+# these lines.
+#
+# irix> df -i -k
+# Filesystem    Type  kbytes     use   avail %use    iuse  ifree %iuse  Mounted
+# /dev/root      efs  966574  615444  351130  64%   20730 188204   10%  /
+# /dev/dsk/dks   efs 3013012 1353603 1659409  45%   22444 611754    4%  /var
+# /dev/dsk/dks   efs 1068340  743093  325247  70%   33267 191579   15%  /usr
+#
+sub df {
+  
+  open (CMD, "df -i -k -l |");
+  
+  while (<CMD>) {
+    chomp;
+    if (/^\s*Filesystem/)  { next; } # ignore header line
+    if (/^\/dev\/dsk\/0s3/)  { next; } # just skip the SVR4 specific 
+    if (/^\/proc/)  { next; }	# OS type filesystems
+    if (/^\/hinv/)  { next; }
+    if (/^\/dev\/fd/)  { next; }
+    if (m@:@) { next; }		# skip NFS mounts
+    $debug && print STDERR "(debug)df: $_\n" ;
+    
+    if (/^.*\s+(\d+)\s+(\d+)%?\s+\d+\s+(\d+)\s+(\d+)%?\s+(\/\S*)\s*$/)
+    {
+      printf "DFspace_avail %d MB $5\n", int($1/1024);
+      print  "DFspace_\%used $2 \%full $5\n";
+      print  "DFinodes_avail $3 inodes $5\n";
+      print  "DFinodes_\%used $4 \%inodes $5\n";
+    }
+  }
+  close (CMD);
+
+}	# end &df()
+
+##
+# iostat not supported on IRIX
+# irix> dkstat 5 1
+# pion.ansto.gov.au total I/O rate, interval: 5 sec, Fri Jul  4 22:31:26 1997
+# dks1d1 dks3d4 dks3d4l1 dks3d4l2 
+#      0      0        0        0 
+#
+sub iostat {
+  my $cmd = "/usr/sbin/dkstat 5 1";
+  my ($count, $IO);
+  my @IOname;
+  
+  open (CMD, "$cmd |");
+  while (<CMD>) {
+    if ($debug) { print STDERR "(debug)iostat: $_\n" ; }
+    
+    next unless $count++;
+    chomp;
+    
+    if ( /^\s*[a-z]/i ) {
+      @IOname = split(/\s+/);
+    } else {
+      s/^\s*//;
+      for $IO (split(/\s+/)) {
+	printf "IOtps %d tps %s\n", $IO, shift(@IOname);
+      }
+    }
+  }
+  close (CMD);
+}				# end &iostat()
+
+
+## 
+# vmstat not supported on IRIX (whats with it folks ??)
+# irix5> /usr/sbin/pmkstat -s 1
+## pion.ansto.gov.au load avg: 3.14, interval: 5 sec, Fri Jul  4 22:53:42 1997
+# queue |      memory |     system       |  disks  |      cpu
+#run swp|    free page| scall ctxsw  intr|  rd   wr|usr sys idl  wt
+#  3   0   125696    0     32   125   451    0    1  75   1  25   0
+# 
+sub vmstat {
+  my $cmd = "/usr/sbin/pmkstat -s 1";
+  my $dline;
+  my @vmstat;
+  
+  open(CMD, "$cmd |");
+  while (<CMD>) { $dline = $_ }; close(CMD); # Get the last line;
+  
+  $_ = $dline;
+  if ($debug) { print STDERR "(debug)vmstat: $_" ; }
+  chop; tr/\r\n//;
+  
+  s/^\s*//;
+  @vmstat = split(/\s+/);
+  if (@vmstat == 13) {
+    printf "MemFree %d MB\n", $vmstat[2];
+    printf "PageOut %d po\n", $vmstat[3];
+    printf "CtxtSw %d rate\n", $vmstat[5];
+    printf "CPUus %d %%user\n", $vmstat[9];
+    printf "CPUsy %d %%system\n", $vmstat[10];
+    printf "CPUidle %d %%idle\n", $vmstat[11];
+  }
+}
+
+##       netstat
+# Extract collision and error rates.
+# See comments in hostmon-client.sunos
+#
+# irix> netstat 5
+#    input   (ec0)     output            input  (Total)    output
+# packets  errs  packets  errs colls  packets  errs  packets  errs colls 
+#   <first line with total values, ignore>
+#     425     0       36     0     0      433     0       44     0     0 
+#     510     0       67     0     2      518     0       75     0     2 
+# 
+sub netstat {
+  my $i = 0;
+  my $cmd = "netstat";
+  
+  my $pid = open (CMD, "$cmd 10 |"); # 10 second sampling
+  while (<CMD>) {
+    if (/^\s*[A-z]+/) { next; }	# ignore header lines if any
+    if (++$i < 3)  { next ;}	# ignore first 3 lines
+    chomp;
+    $debug && print STDERR "(debug)netstat: $_\n" ;
+    
+    if (/^\s*\d+(\s+\d+)*\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$/)
+    {
+      my ($ipkts, $opkts) = ($2, $4);
+      
+      if ($ipkts == 0) { $ipkts = 1; } # avoid division by zero
+      if ($opkts == 0) { $opkts = 1; }
+      printf "NetIErr %d PktRate\n", int ($3 * 100 / $ipkts);
+      printf "NetOErr %d PktRate\n", int ($5 * 100 / $opkts);
+      printf "NetColl %d PktRate\n", int ($6 * 100 / $opkts);
+    }
+    kill ('TERM', $pid) ; last ; # no more lines
+  }	
+  close (CMD);
+}	# end &netstat()
+
+1;
+

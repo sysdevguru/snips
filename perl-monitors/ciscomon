@@ -1,0 +1,278 @@
+#!/usr/local/bin/perl -w
+#
+# $Header: /home/cvsroot/snips/perl-monitors/ciscomon,v 1.0 2001/07/09 04:33:20 vikas Exp $
+#
+#        ciscomon - perl monitor for Cisco Routers
+#
+# This script uses rcisco to telnet into a Cisco router and can query
+# various Cisco specific parameters such as 
+#	CPU usage
+#	Airflow & Temperature
+#	Voltages
+#	Memory utilzation
+# The router names, addresses and passwords are specified in the config
+# file, along with the thresholds for each parameter. You can also specify
+# a default.
+#
+# Part of the SNIPS monitoring package.
+#
+## Contributed by Mathias Koerber, SingNet, mathias@singnet.com.sg, May 96
+#  Derived from bgpmon v1.3
+#
+## 
+##
+
+use strict;
+use vars qw ( $snipsroot $debug $rprog $rcisco $rpasswd
+	      %vname %vunits %rcommand %match
+	      @items @routers %wthres %ethres %cthres
+	      %passwd %variables %allvars %varvalue
+	    );
+
+BEGIN {
+  $snipsroot = "/usr/local/snips"  unless $snipsroot;	# SET_THIS
+  push (@INC, "$snipsroot/etc"); push (@INC, "$snipsroot/bin");
+  require "snipsperl.conf" ;		# local customizations
+}
+
+use SNIPS;
+
+############################
+## Variables customization #  overrides values in the snipslib.pl library
+############################
+$rprog="$rcisco";			# Path for rcisco.
+$rpasswd="myPasswd";			# if NULL, uses the default in rcisco
+$s_pollinterval=60*10;			# Seconds to sleep between tries.
+$debug = 0;				# set to 1 for debugging output
+
+#
+#
+$vname{"cpuusage"}      = "CPUusage/5m";
+$vunits{"cpuusage"}     = "Percent";
+$rcommand{"cpuusage"}   = "show processes";
+$match{"cpuusage"}      = '^CPU utilization for five seconds: \d+%/\d+%; one minute: \d+%; five minutes: (\d+)%';
+
+$vname{"airflow"}       = "Airflow";
+$vunits{"airflow"}      = "Deg(C)";
+$rcommand{"airflow"}    = "show env all";
+$match{"airflow"}       = q(^\s*Airflow\s+temperature\s+measured\s+at\s+([+-.\d]+)\(C\)\s*$);
+
+$vname{"inlet"}         = "Inlet";
+$vunits{"inlet"}        = "Deg(C)";
+$rcommand{"inlet"}      = "show env all";
+$match{"inlet"}         = q(^\s*Inlet\s+temperature\s+measured\s+at\s+([+-.\d]+)\(C\)\s*$);
+#$match{"inlet"}        = q(^\s*Inlet\s+temperature\s+measured\s+at\s+([+-.\d]+)\(C\)\s*$);
+$match{"inlet"}         = q(^\s*chassis\s+inlet\s+measured\s+at\s+([+-.\d]+)C.*$);
+
+
+$vname{"v+12"}          = "+12V";
+$vunits{"v+12"}         = "mVolt";
+$rcommand{"v+12"}       = "show env all";
+$match{"v+12"}          = q(^\s*\+12\s+volts\s+measured\s+at\s+([+-.\d]+)\(V\)\s*$);
+
+$vname{"v+5"}           = "+5V";
+$vunits{"v+5"}          = "mVolt";
+$rcommand{"v+5"}        = "show env all";
+$match{"v+5"}           = q(^\s*\+5\s+volts\s+measured\s+at\s+([+-.\d]+)\(V\)\s*$);
+
+$vname{"v-12"}          = "-12V";
+$vunits{"v-12"}         = "mVolt(-)";
+$rcommand{"v-12"}       = "show env all";
+$match{"v-12"}          = q(^\s*\-12\s+volts\s+measured\s+at\s+[+-]([.\d]+)\(V\)\s*$);
+
+$vname{"v+24"}          = "+24V";
+$vunits{"v+24"}         = "mVolt";
+$rcommand{"v+24"}       = "show env all";
+$match{"v+24"}          = q(^\s*\+24\s+volts\s+measured\s+at\s+([.+-\d]+)\(V\)\s*$);
+
+$vname{"memory"}        = "ProcMem_used";
+$vunits{"memory"}       = "Percent";
+$rcommand{"memory"}     = "show memory free";
+$match{"memory"}        = q(^\s*Processor\s+\S+\s+\S+\s+(\d+)\s+([\d]+)\s+(\d+)\s*.*$);
+
+-x $rprog || die("Could not find executable $rprog, exiting");
+
+##
+# Read the config file.
+sub readconf {
+  my $lineno = 0;
+  my $item;
+  my $event = new_event();
+  my ($var, $router);
+
+  if ($debug == 0 && $libdebug > 0) {
+    $debug = $libdebug;
+    $libdebug = 1 if ($debug > 1) ;
+  }
+  $s_sender = 'ciscomon' if ($s_sender eq "");
+
+  open(CONFIG,"<$s_configfile")||die("Couldn't find $s_configfile, exiting");
+  my $datafd = open_datafile($s_datafile, "w");
+  # alter_event($event, $s_sender, undef, undef, undef, $varname, $varunits);
+
+  undef @items;
+  undef %variables;
+  undef %wthres; undef %ethres; undef %cthres;
+
+  while(<CONFIG>)
+  {
+    ++$lineno;
+    chomp;
+    if(/^\s*\#/) {next;}   # skip comments
+    if(/^\s*$/)  {next;}   # skip blank lines
+
+    if (/^\s*RRDTOOL\s+ON/i) { $SNIPS::dorrd = 1; next; }
+    if (/^(sleepinterval)\s+(\d+)\s*$/i || /^(pollinterval)\s+(\d+)\s*$/i) {
+      $s_pollinterval = $2;
+      next;
+    }
+    if (/^(DEFAULT)\s*(\S*)$/i)
+    {
+      $router = 'default';    # do not push !!
+      $passwd{$router} = $2 if $2;
+    }
+    elsif (/^(\S+)\s+(\S+)\s*(\S*)$/) # must start at beginning of line
+    {
+      $router="$1\t$2" ;	# the name and address of the router
+      $passwd{$router} = $3 if ($3);
+      push (@routers, $router);
+    }
+    elsif (/^\s+(\S+)\s+([+-.\d]+)?\s+([+-.\d]+)?\s+([+-.\d]+)?\s*$/)
+    {	# continuation line, variable & 3 thresholds
+      my $var = $1;
+      $var =~ tr/A-Z/a-z/;
+      $allvars{$var} = 1;	# keys gives all variables to be monitored
+      my $item = "$router\t$var";
+      $variables{$item} = 1;
+      if ($router eq "default")
+      {
+	print STDERR "cannot use defaults for default (var=$var)\n" 
+	  if ( (!defined $2) || (!defined $3) || (!defined $4) );
+	next;
+      }
+      
+      ($wthres{$item}, $ethres{$item}, $cthres{$item}) = ($2, $3, $4);
+      $wthres{$item} = $wthres{"default\t$var"} if (! defined($2));
+      $ethres{$item} = $ethres{"default\t$var"} if (! defined($3));
+      $cthres{$item} = $cthres{"default\t$var"} if (! defined($4));
+
+      push(@items, $item);
+      my ($name, $ip) = split(/\t/, $item);
+      alter_event($event, $s_sender, $name, $ip, undef, $vname{$var}, $vunits{$var});
+      write_event($datafd, $event);
+      next;
+    }
+    else { print "Ignoring illegal line: $_\n"; }
+
+  }   # end while(CONFIG)
+
+  close(CONFIG);
+  if(0>$#routers) {die("Nothing to monitor in $s_configfile, exiting")};
+  if(0>$#items) {die("Nothing to monitor in $s_configfile, exiting")};
+  if ($debug) {
+    print "Items are:\n"; foreach (@items) { print "\t$_\n" } ;
+  }
+}                               # end: readconf
+
+
+## Check state of each router and get the value for each variable
+#
+sub get_variable_values {
+  my ($rname, $routerip);
+
+  foreach my $r (@routers) {
+    my $loginok = 0;
+    my (@result);
+
+    ($rname, $routerip) = split(/\t/, $r);
+    
+    $debug &&  print "Checking router $rname\n";
+    my $upasswd = ( $passwd{$r} ? $passwd{$r} : 
+		    ($passwd{"default"} ? $passwd{"default"} : $rpasswd) );
+    my $command="$rprog $routerip ".' "'."$upasswd".'" "';
+    my %cmdused = ();
+    foreach my $v (keys %allvars) {
+      my $item = "$r\t$v";
+      if (($variables{$item}) && (!$cmdused{$rcommand{$v}})) {
+	$command .="\n$rcommand{$v}";	# send \n to cisco before command
+	$cmdused{$rcommand{$v}} = 1;	# eliminate duplicates
+      }
+    }	# foreach keys %allvars
+    $command .='" ';
+
+    $debug && print "(debug) get_var_values(): running command $command\n" ;
+    
+    open (ROUTER, "$command |") ;
+    while(<ROUTER>) {
+      next if /^\s*$/;
+      next if /terminal length/i;
+      next if /User Access Verifi/i;
+      next if /password/i;
+      tr/\r\n//d;
+      if ( />/ ) {$loginok = 1 ; next} # got the 'Router>' prompt
+      foreach my $v (keys %allvars) {
+	my @r;
+	if (@r = m|$match{$v}|i) {
+	  
+	  if ($v =~ /memory/) {
+                                # the memory matchline returns 3 values...
+	    next if ($r[0] == 0); # can't divide :-(
+	    my $pc = ($r[1])/($r[0])*100; # percentage used..
+	    push(@result,$v,$pc);
+	  }
+	  elsif ($v =~ /v[+-][\d]+/i) {
+                                # ah, a voltage. we'll multiply by 10 and abs()
+	    my $vl = $r[0]*1000;
+	    $vl *= -1 if ($vl < 0); # negative voltages
+	    push(@result,$v,$vl);
+	  }
+	  else {
+                                # default, just one value
+	    push(@result,$v,$r[0]);
+	  }
+	  next;
+	  #           if ($debug) {print "(debug) processing line: $_\n" ;}
+	}
+	# $debug && print "(debug) skipping line: $_\n" ;
+
+      }		# for (keys %allvars)
+    }		# end while ROUTER
+    close (ROUTER);
+    
+    if ($loginok == 0) {
+      print "Login into remote router $rname failed\n" ;
+      next;
+    }
+
+    while (($#result >= 0)) {
+      my $var        = shift(@result);
+      my $value      = shift(@result);
+      my $item = "$rname\t$routerip\t$var";
+      $varvalue{$item} = $value;
+    }
+  }	# foreach @routers
+
+}	# sub get_variable_values()
+
+
+## Called by snips generic 'poll' for each event read from the datafile.
+#  This order matches the sequence of peers in @peers
+sub dotest {
+  my ($event, $i) = @_;
+  &get_variable_values()  if ($i == 1);
+
+  my $item = $items[$i - 1];	# index starts from 0, not 1
+
+  my ($status, $threshold, $maxseverity) =
+    calc_status($varvalue{$item}, $wthres{$item}, $ethres{$item}, $cthres{$item});
+  # status, value, thres, maxseverity
+  return ($status, $varvalue{$item}, $threshold, $maxseverity);
+
+}	# sub dotest()
+
+###
+### Main program:
+###
+
+&snips_main(\&readconf, undef, \&dotest);
+

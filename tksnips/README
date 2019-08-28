@@ -1,0 +1,34 @@
+From lwl@sorcery.black-knight.org Sat Jul 10 12:14:52 1999
+Received: from mail.black-knight.org (sorcery.black-knight.org [209.218.40.26])
+	by mail.navya.com (8.8.8/8.8.8) with SMTP id PAA15661
+	for <vikas@navya.com>; Sat, 10 Jul 1999 15:14:33 -0400 (EDT)
+Received: (qmail 67352 invoked by uid 101); 10 Jul 1999 19:14:52 -0000
+Received: from localhost (sendmail-bs@127.0.0.1)
+  by localhost with SMTP; 10 Jul 1999 19:14:52 -0000
+Date: Sat, 10 Jul 1999 12:14:52 -0700 (PDT)
+From: Lydia Leong <lwl@sorcery.black-knight.org>
+To: vikas@navya.com
+Subject: NOCOL enhancements
+Message-ID: <Pine.SGI.3.96.990710120959.68691A-500000@sorcery.black-knight.org>
+Status: RO
+
+Over the years of dealing with a NOCOL installation that would have dozens
+upon dozens of simultaneous users logged into the monitoring machine
+running netconsole, it became abundantly clear that this was a vast
+waste of resources on that machine, as well as an undesirable security
+issue. Also, the limitations of the curses-based interface meant that
+it was fairly difficult to highlight important items, etc.
+
+I wrote ndaemon, which is a daemonized version of netconsole that scans
+files in a similar way, but spits data over the network to the monitoring
+clients that it multiplexes. The monitoring clients can be written in
+anything; I chose Tcl/Tk, as a readily portable quick implementation.
+
+I have attached both the source for ndaemon, and the Tcl/Tk client.
+The client also requires TIX, which is a Tcl/Tk extension. It runs
+on Unix, Windows, and the Mac.
+
+
+	-- Lydia
+
+

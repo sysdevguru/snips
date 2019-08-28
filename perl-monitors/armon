@@ -1,0 +1,444 @@
+#!/usr/local/bin/perl  -w
+#
+# $Header: /home/cvsroot/snips/perl-monitors/armon,v 1.0 2001/07/09 04:33:20 vikas Exp $
+#
+# 	armon/nrmon - perl snips appletalk (novell) route monitor
+#
+# AUTHOR:
+# 	Original Version: John Wobus, jmwobus@mailbox.syr.edu, 9/21/1993
+#  	Rewrite for SNIPS:  vikas@navya.com 7/2000
+#
+#    (c) Syracuse University Computing & Network Services 1993
+#
+# No warranty is expressed or implied.  Permission to copy and use is
+# extended to all.  Permission to redistribute is granted under the
+# following conditions: it is not sold for profit; this copyright
+# notice remains intact; the same permissions extend to the recipient;
+# and if any changes are made, a notice is added so stating.
+#
+#####################
+#
+#
+#    armon reads the AppleTalk/Novell routing table from a Cisco router
+#    and compares it with its own configuration file and reports the
+#    differences through SNIPS.  Snips reports two kinds of problems:
+#
+#    Device      Address      Time   +-Variable-+ +-Value-+  Condition
+#    ZONE1   12345-e9       09:50   Reg_ARoute        0    Critical
+#    ZONE2   67890-e2       13:17   Unrg_ARoute       0    Critical
+#
+#    The first line states that a route to zone ZONE1 & Appletalk network
+#    number 12345 through the router's interface Ethernet 9 is missing.
+#    The second line states that a route has appeared to ZONE2 & Appletalk
+#    network number 67890 through the router's interface Ethernet 2, but
+#    this route is not listed in armon's configuration file.
+#
+#    It is important to remember that armon monitors the network as
+#    it appears from one Cisco router in the network.  It will notice
+#    and report many kinds of changes, but even so, its view is restricted.
+#
+#    When installed as 'nrmon', this displays Novell routes instead of
+#    AppleTalk routes.
+#
+# Files used:
+#
+#   rcisco                      perl program to do a Cisco router
+#                               command remotely.
+# Snips event elements used:
+#   sender                     "armon"
+#   severity                   up: 4; down: 3,2,1;
+#   nocop                      up, down, unknown, test
+#   device
+#     name                     the Appletalk ZONE name
+#     addr                     the Appletalk network number or range of
+#                              network numbers followed by '-' and
+#                              the Router's ethernet port (e0, e1, etc).
+#                              Example: "44123-44125-e8"
+#   var                       
+#     name                      either "Reg_AtalkRoute" or "Unrg_ATalkRoute"
+#     value                     0 if missing, 1 if present
+#     threshold                 always 0
+#     units                     always "Entry"
+#
+# Configuration file format for Appletalk:
+#    #<text>                                   Comment line.
+#    router=<router> [passwd]                  Name of Cisco router.
+#    <netnum> e<intnum> <zone>                 Route via ethernet interface.
+#    <netnum>-<netnum> s<intnum> <zone>        Phase 2 route via serial iface
+#    test= <netnum> e<intnum> <zone>
+#    test= <netnum>-<netnum> e<intnum> <zone>  Routes in test mode.
+#
+# Sample configuration file for AppleTalk:
+#    # armon configuration
+#    router=mycisco.excellent.edu myPasswd
+#    12345 e1 ZONE1
+#    # A Phase 2 net via ethernet 0:
+#    11111-11112 e0 ZONE1
+#    # A net we don't want to monitor (learn't via serial 1)
+#    test=23456 s1 ZONE2
+#
+# Configuration file format for Novell:
+#    #<text>                                   Comment line.
+#    router=<router>                           Name of Cisco router.
+#    <netnum> e<intnum> [next-hop]             Route via ethernet interface.
+#    test= <netnum> s<intnum> [next-hop]
+#
+# Sample configuration file for Novell:
+#    # nrmon configuration
+#    router=mycisco.excellent.edu myPasswd
+#     # Route that is through another router:
+#     2 e9 D2.aa00.0400.0118
+#     # Directly-connected network:
+#     4 e22
+#    test=3  s1 D2.aa00.0400.1234
+## 
+##
+#
+#
+
+use strict;
+use vars qw ( $snipsroot $rcisco $debug $router
+	      $rprog $rpasswd $rcommand $varname $varname_unreg
+	      $varunits $reg_maxseverity $unreg_maxseverity $doline
+	      %found %idevicem %registered %forget @items
+	      $rtline $armode $nrmode
+	    );
+
+BEGIN {
+  $snipsroot = "/usr/local/snips"  unless $snipsroot;	# SET_THIS
+  push (@INC, "$snipsroot/etc"); push (@INC, "$snipsroot/bin");
+  require "snipsperl.conf" ;		# local customizations
+}
+
+use SNIPS;
+
+############################
+## Variables customization #
+############################
+$rprog="$rcisco";			# Path for rcisco.
+$rpasswd="";				# if NULL, uses the default in rcisco
+$reg_maxseverity = $E_CRITICAL ;	# max severity of registered events
+$unreg_maxseverity = $E_ERROR ;		# max severity of unregistered events
+$debug = 0;				# set to 1 for debugging output
+$s_pollinterval = 60*5;
+############################
+
+-x $rprog || die("Could not find executable $rprog, exiting");
+
+##
+# Read the config file. Use '\t' as a separator (since we are allowing
+# spaces in the zone names).
+# Interfaces are specified as e (ethernet) s (serial) f (fddi) a (atm)
+#
+##
+
+sub readconf {
+  my $lineno = 0;
+  my $item;
+  my $event = new_event();
+
+  if ($debug == 0 && $libdebug > 0) {
+    $debug = $libdebug;
+    $libdebug = 1 if ($debug > 1) ;
+  }
+  $s_sender = 'armon' if ($s_sender eq "");
+
+  undef @items;	# if re-reading config file
+
+  open(CONFIG,"<$s_configfile")||die("Couldn't find $s_configfile, exiting");
+  my $datafd = open_datafile($s_datafile, "w");
+  alter_event($event, $s_sender, undef, undef, undef, $varname, $varunits);
+
+  while(<CONFIG>)
+  {
+    ++$lineno;
+    chomp;
+    if(/^\s*\#/) {next;}   # skip comments
+    if(/^\s*$/)  {next;}   # skip blank lines
+
+    if (/^\s*RRDTOOL\s+ON/i)  { $SNIPS::dorrd = 1; next; }
+    if (/^\s*RRDTOOL\s+OFF/i) { $SNIPS::dorrd = 0; next; }
+    if (/^(sleepinterval)\s+(\d+)\s*$/i || /^(pollinterval)\s+(\d+)\s*$/i) {
+      $s_pollinterval = $2;
+      next;
+    }
+    if(/^\s*ROUTER\s*=?\s*(\S+)(\s+(\S+))?/i)  {
+      $router = $1;
+      $rpasswd = $3 if ($3);
+      next;
+    }
+    ## For AppleTalk
+    if ($armode && /^\s*(\d+(-\d+)?)\s+((e|s|a|f|t)\d+\S*)\s+(\w\S*(\s+\S+)*)\s*$/)
+    {
+      my ($nets, $interface, $zone) = ($1, $3, $5);
+      $zone=~tr/a-z/A-Z/;
+      $item="$nets\t$interface\t$zone";
+      push(@items,$item);
+      alter_event($event, undef, "$zone", "$nets-$interface", undef, undef, undef);
+      write_event($datafd, $event);
+      next;
+    }
+    if ($armode && /^\s*TEST\s*=\s*(\d+(-\d+)?)\s+((e|s|a|f|t)\d+\S*)\s+(\w\S*(\s+\S+)*)\s*$/i)
+    {
+      my (%tevent, $tevent);
+
+      my ($nets, $interface, $zone) = ($1, $3, $5);
+      $zone=~tr/a-z/A-Z/;
+      $item="$nets\t$interface\t$zone";
+      push(@items,$item);
+      %tevent = unpack_event($event);
+      $tevent{'nocop'} |= $n_TEST;
+      $tevent = pack_event(%tevent);
+      alter_event($tevent, undef, "$zone", "$nets-$interface", undef, undef, undef);
+      write_event($datafd, $tevent);
+      next;
+    }
+    ## For NOVELL routes
+    if ($nrmode && /^\s*([\dABCDEF]+)\s+((e|s|F.)[\d\.\/]+)(\s+(\S+))?\s*$/i)
+    {
+      my ($nets, $interface, $nhop) = ($1, $2, $5);
+      $nhop="" if (! $nhop);  $nhop=~tr/a-z/A-Z/;
+      $item="$nets\t$interface\t$nhop";
+      push(@items,$item);
+      alter_event($event, undef, "$nhop", "$nets-$interface", undef, undef, undef);
+      write_event($datafd, $event);
+      next;
+    }
+    if ($nrmode && /^\s*TEST\s*=\s*([\dABCDEF]+)\s+((e|s|F.)[\d\.\/]+)(\s+(\S+))?\s*$/i)
+    {
+      my (%tevent, $tevent);
+
+      my ($nets, $interface, $nhop) = ($1, $2, $5);
+      $nhop="" if (! $nhop);   $nhop=~tr/a-z/A-Z/;
+      $item="$nets\t$interface\t$nhop";
+      push(@items,$item);
+      %tevent = unpack_event($event);
+      $tevent{'nocop'} |= $n_TEST;
+      $tevent = pack_event(%tevent);
+      alter_event($tevent, undef, "$nhop", "$nets-$interface", undef, undef, undef);
+      write_event($datafd, $tevent);
+      next;
+    }
+
+    print "[$lineno] Ignoring illegal line: $_\n";
+
+  }	# end while(CONFIG)
+
+  close(CONFIG);
+  close_datafile($datafd);
+
+  if(!$router)  {die("No router specified in $s_configfile, exiting")};
+  if(0>$#items) {die("Nothing to monitor in $s_configfile, exiting")};
+  if ($debug) {
+    print "\n(debug) Router= $router\n";
+    print "Items are:\n"; foreach (@items) { print "\t$_\n" } ;
+  }
+
+  # create some utility hashes
+  foreach $item (@items) {
+    $registered{$item} = 1;		# exists in the config file
+    $idevicem{$item} = 1;			# easy index to each item found.
+  }
+
+}	# sub readconf()
+
+## Check the current routes on the router. If a line begins with
+#  a space, it is a continuation line.
+#
+sub dotest
+{
+    my ($loginok) = 0;
+    foreach(@items) {$found{$_}=0;}
+    
+    my $command="$rprog $router ".' "'."$rpasswd".'" '.'"'."$rcommand".'"';
+    if ($debug) {print "(debug) dotest: running command $command\n" ;}
+    
+    open(ROUTER,"$command |");
+    
+    my $line="";
+    $rtline="";
+    while(<ROUTER>)
+    {
+	tr/\r\n//d;
+	if ( />/ ) {$loginok = 1 ;} # got the 'Router>' prompt
+	if(/^\s/){	# Lines starting with space are continuation lines.
+	    $rtline .= $_;
+	    next;
+	}
+	else { $line=$_; }	# save in temp variable
+
+	if($rtline ne "") { &$doline(); $rtline=$line; }
+    }
+    
+    if($rtline ne "") { &$doline(); $rtline=""; }
+    close(ROUTER);
+    if ($loginok == 0) { print STDERR "Login into remote host failed\n" ;}
+}
+
+## The output of the 'show apple route' on a cisco is:
+#	Nomad-Gateway>show apple route
+#	Codes: R - RTMP derived, C - connected, 2 routes in internet
+#
+#	C Net 50-50 directly connected, Ethernet0, zone Netplex:Sub50
+#	R Net 52 [1/G] via 50.128, 1 sec, Ethernet0, zone Netplex:Sub50
+#
+# The output of 'show novell route' on a cisco is:
+#	R Net 27 in [1] hops via D2.aa00.0400.0118,  18 sec, 0 uses, Ethernet9
+#	C Net 31 is directly connected, 29924 uses, Ethernet15
+#
+# The output of the CAP (Columbia Appletalk) 'atlook'  command is:
+#  nisc# % /usr/local/cap/bin/atlook
+#  abInit: [ddp:   0.50, 183], [GW:   0.50, 128] starting
+#  Looking for =:=@Netplex:Sub50 ...
+#    1 - A1-Server:AFPServer@*               [Net:  0.52  Node: 56 Skt:251]
+#    2 - Al's Macintosh:AFPServer@*          [Net:  0.50  Node: 82 Skt:251]
+# Use a regexp of the form:
+#  /^\s*\d+\s+-\s+(\w*(\s+\w+)*)"?\s+[.*]\s*$/
+##	
+sub doline_armon
+{
+    my ($nets, $interface, $zone, $xzones) ;
+    # $rtline has the line to process.
+    if($rtline =~ /^[RC] Net (\d+(-\d+)?).*((Ethernet|Serial|ATM|Fddi|Fa)[\d\.\/]+\s*)(\D.*)$/)
+    {
+      $nets=$1; $interface = $3; $xzones=""; $_=$5;
+      if(/^(.*)Additional zones: (.*)$/){$_=$1; $xzones=$2;}
+      if(/^, zone (\S(.*\S)?)\s*$/){$zone=$1;}
+      elsif(/\s*Zone: "(.*)"\s*/){$zone=$1;}
+      elsif(/\s*no zone set\s*/){$zone="(no zone set!)";}
+      else{$zone="(unparseable)";}
+      $zone=~tr/a-z/A-Z/;	# set case-insensitive
+      $interface =~ s/Ethernet/e/ ;  $interface =~ s/Serial/s/ ;
+      $interface =~ s/ATM/a/ ;   $interface =~ s/Fddi/f/ ;
+      $interface =~ s/Fa/t/ ;
+      my $item="$nets\t$interface\t$zone";
+      if ($debug) {print "(debug) doline_armon: Found item $item\n" ;}
+      $found{$item}=1;		# found the route
+      if(!$idevicem{$item})	# this is a NEW route
+      {
+	$idevicem{$item}=2;	# '2' indicates this is a unknown route
+	push(@items,$item);	# Add the newly discovered route
+      }		#Note: at some time, we might deal with the additional zones.
+    }
+    else
+    {
+      #	if ($debug) {print "(debug) doline: Router output skipped- $rtline\n";}
+    }
+}   	# doline_armon()
+
+## The output of 'show novell route' on a cisco is:
+#	R Net 27 in [1] hops via D2.aa00.0400.0118,  18 sec, 0 uses, Ethernet9
+#	C Net 31 is directly connected, 29924 uses, Ethernet15
+##	
+sub doline_nrmon
+{
+  my ($nets, $interface, $nhop) ;# $ready has the line to process.
+  if($rtline =~ /^[RC] (Net)?\s*([\dABCDEF]+) (((in)?.*via\s+(\S+),)|(is)?).*,\s+((Ethernet|Serial|F.)[\d\.\/]+)$/)
+    {
+      ($nets, $interface, $nhop) = ($2, $8, $6);
+      $nhop=~tr/a-z/A-Z/; # set case-insensitive
+      $interface =~ s/Ethernet/e/ ;  $interface =~ s/Serial/s/ ;
+      my $item="$nets\t$interface\t$nhop";
+      if ($debug) {print "(debug) doline_nrmon: Found item $item\n" ;}
+      $found{$item}=1;		# found the route
+      if(!$idevicem{$item})	# this is a NEW route
+      {
+	$idevicem{$item}=2;	# '2' indicates this is a unknown route
+	push(@items,$item);	# Add the newly discovered route
+      }		#Note: at some time, we might deal with the additional zones.
+    }
+    else
+    {
+      #	if ($debug) {print "(debug) doline: Router output skipped- $rtline\n";}
+    }
+}	# doline_nrmon()
+   
+
+## Do one complete test
+#
+sub dopoll {
+
+  my $nullevent = new_event();
+  my $event;
+  my $maxseverity;
+
+  alter_event($nullevent, '', '', '', '', '', '');
+  &dotest();	# parses router output and populates %found + %idevicem
+
+  my $datafd = open_datafile($s_datafile, "r+");	# open for read + write
+
+  # FIX FIX, if new route found, then dont read_event() since we will
+  # go past end of file. $varname{$item} is kinda stupid. Cannot
+  # detect when we read new unknown route.
+  foreach my $item (@items)
+  {
+    my ($nets, $interface, $zone) = split(/\t/, $item) ;
+    my ($status,$value);
+
+    if($idevicem{$item} == 2)		# previously unknown route
+    {
+      $idevicem{$item} = 1;	# mark as known
+      my $newevent = new_event();
+      alter_event($newevent, $s_sender,"$zone", "$nets-$interface", undef,
+		  $varname_unreg, $varunits);
+      write_event($datafd, $newevent);
+      next;
+    }
+
+    $event = read_event($datafd);
+    if ($registered{$item})	# registered route from config file
+    {
+      $maxseverity = $reg_maxseverity;
+
+      if ($found{$item}) { $status = 1; $value = 1; } # route is present
+      else { $status = 0; $value = 0; }  # configured route is missing
+    }	# if $registered
+    else	### unregistered route
+    {
+      $maxseverity = $unreg_maxseverity;
+
+      if ($found{$item}) {	# unexpected route found (not in config)
+	$forget{$item}=0;	# remember to check the next time
+	$status = 0; $value = 1;
+      }
+      else {	#  earlier unknown route has gone away.
+	$forget{$item}=1;	# dont write out or null out the event on disk
+	$idevicem{$item} = 0;	# so we reinitialize this when we see it next
+      }
+    }	# if-else $registered
+
+    update_event($event, $status, $value, 0, $maxseverity);
+
+    if ($forget{$item}) { rewrite_event($datafd, $nullevent); }
+    else { rewrite_event($datafd, $event); }
+
+  }	# end foreach(@items)
+  
+  close_datafile($datafd);
+  return 1;
+
+}	# dopoll()
+
+###
+### Main program:
+###
+
+if ($0 =~ /nrmon/) {
+  $nrmode = 1;
+  $rcommand = "show novell route";
+  $varname = "Reg_NovellRoute";
+  $varname_unreg = "Unrg_NovellRoute";
+  $varunits = "Entry" ;
+  $doline = \&doline_nrmon;
+}
+else {
+  $armode = 1;
+  $rcommand = "show apple route";
+  $varname = "Reg_ATalkRoute";
+  $varname_unreg = "Unrg_ATalkRoute";
+  $varunits = "Entry" ;
+  $doline = \&doline_armon;
+}
+
+
+&snips_main(\&readconf, \&dopoll, undef);

@@ -1,0 +1,57 @@
+## Config file for APC Smart UPS's
+#
+# The config file uses absolute values or deltas.  It uses an absolute
+# value in the style of the hostmon config file if a '-' is placed in the
+# nominal value field.  Otherwise the thresholds represent differences from
+# the nominal value.  This is useful in saying that, say, a difference
+# of more than 10 volts is a problem - rather than saying that only low or
+# only high values are bad.
+# 
+# Also, to enable the UPS to get shut down, there's a hook to ask the monitor
+# to cause it to turn itself off.  One puts a file in the snips etc directory
+# with the config file, which is named apc_shutdown.  If this file exists
+# apcmon will ask the UPS to shut down.  One should, of course, have
+# set the UPS grace period to a large enough value so that the monitor
+# can run and send the sequence before you feel compelled to halt the system.
+# 
+# E.g. the shutdown grace period is three minutes, so you create the file,
+# wait however long it takes for the apcmon to run again (sleepint) , then
+# perhaps wait a bit more, then start the halt.  If apcmon only runs at five
+# minute intervals this is not going to work all the time, but if the grace
+# period is greater than the sleepint (by however long it takes the halt to
+# complete) you can ensure that things will work.
+# 
+
+PORT		/dev/ttyb
+UPS_NAME	YourName
+
+# Variable	Nominal	   Units	Warning Error Critical
+#		 Value			 Delta  Delta  Delta
+#
+
+# Physical indicators
+#
+Battery	27	Volts		 2  3  4
+Freq	60	Hertz		 2  4  8	# Switching power supplies OK
+Temp	-	Cent.		48 51 55
+Line	118	Volts		 8 16 25
+Output	118	Volts		 4  8 16
+
+# Operational indicators
+#
+Power	-	%avail		85 90 95
+Fill	-	%charge		90 75 40	# We trigger shutdown at the
+						# Fill critical threshold.
+						# Make sure there's enough
+						# time left at the selected
+						# fill level to complete the
+						# shutdown.
+
+# Status indicators
+#
+Online	   1	Avail		1  1  1
+AcPresent  1	Avail		1  1  2		# Keep UnCritical
+OnBattery  0	Avail		1  1  1		# Let OnBattery go critical
+BatteryLow 0	Avail		1  1  1
+
+

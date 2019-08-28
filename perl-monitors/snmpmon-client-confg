@@ -1,0 +1,5 @@
+##  snmpmon-client-confg:	Configuration file
+#
+THIS CONFIG IS NOW MERGED WITH  snmpmon-confg
+
+SNMPMON-CLIENT READS  snmpmon-confg  DIRECTLY.

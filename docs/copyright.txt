@@ -1,0 +1,1 @@
+See ../COPYRIGHT (in source directory).

@@ -1,0 +1,195 @@
+Making wash
+rm -rf /usr/obj/ng/snmpapps/013
+mkdir /usr/obj/ng/snmpapps/013
+Links removed
+Making links in /usr/obj/ng/snmpapps/013
+for i in ${SRCDIR}/*; do mklink -RFl "${i}"; done
+Links made
+cd /usr/obj/ng/snmpapps/013
+Making Makefile
+./configure
+creating cache ./config.cache
+checking for mkdirhier... /usr/local/bin/mkdirhier
+using /usr/local/bin/mkdirhier
+checking for gcc... cc
+checking whether the C compiler (cc -O3 ) works... yes
+checking whether the C compiler (cc -O3 ) is a cross-compiler... no
+checking whether we are using GNU C... yes
+checking whether cc accepts -g... yes
+checking for a BSD compatible install... /usr/local/bin/install -c
+checking whether ln -s works... yes
+checking for ranlib... ranlib
+checking host system type... i686-pc-linux-gnulibc1
+checking for ld used by GCC... /usr/bin/ld
+checking if the linker (/usr/bin/ld) is GNU ld... yes
+checking for BSD-compatible nm... /usr/bin/nm -B
+checking for cc option to produce PIC... -fPIC
+checking if cc PIC flag -fPIC works... yes
+checking if cc static flag -static works... -static
+checking if the linker (/usr/bin/ld) is GNU ld... yes
+checking whether the linker (/usr/bin/ld) supports shared libraries... yes
+checking command to parse /usr/bin/nm -B output... yes
+checking how to hardcode library paths into programs... immediate
+checking for /usr/bin/ld option to reload object files... -r
+checking dynamic linker characteristics... Linux ld.so
+checking if libtool supports shared libraries... yes
+checking whether to build shared libraries... yes
+checking whether to build static libraries... yes
+checking for objdir... .libs
+creating libtool
+checking for perl5... /usr/local/bin/perl5
+checking how to run the C preprocessor... cc -E
+checking for ANSI C header files... yes
+checking for sys/file.h... yes
+checking for sys/ioctl.h... yes
+checking for sys/time.h... yes
+checking for syslog.h... yes
+checking for memory.h... yes
+checking for sys/sockio.h... no
+checking for stdlib.h... yes
+checking for unistd.h... yes
+checking for utmpx.h... no
+checking for off_t... yes
+checking whether time.h and sys/time.h may both be included... yes
+checking whether struct tm is in sys/time.h or time.h... time.h
+checking for gettimeofday... yes
+checking for select... yes
+checking for socket... yes
+checking for strdup... yes
+checking for getutent... yes
+checking for connect... yes
+checking for gethostbyname... yes
+checking for system network libs... using 
+checking for CMU SNMP... found in /usr/local
+updating cache ./config.cache
+creating ./config.status
+creating Makefile
+creating config.h
+cd /usr/obj/ng/snmpapps/013
+make all
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H   -c snmpstatus.c -o snmpstatus.o
+In file included from /usr/local/include/snmp/snmp.h:60,
+                 from snmpstatus.c:62:
+/usr/local/include/snmp/snmp_api.h:154: warning: `struct timeval' declared inside parameter list
+/usr/local/include/snmp/snmp_api.h:154: warning: its scope is only this definition or declaration,
+/usr/local/include/snmp/snmp_api.h:154: warning: which is probably not what you want.
+/usr/local/include/snmp/snmp_api.h:240: warning: `struct timeval' declared inside parameter list
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -DCMU_SNMPAPPS_VERSION="\"`head -1 VERSION`\"" -c version.c -o version.o 
+/bin/sh ./libtool cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpstatus snmpstatus.o version.o -rpath /usr/local/lib  -L/usr/local/lib -lsnmp 
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpstatus snmpstatus.o version.o -L/usr/local/lib -lsnmp -Wl,--rpath -Wl,/usr/local/lib
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H   -c snmpget.c -o snmpget.o
+In file included from /usr/local/include/snmp/snmp.h:60,
+                 from snmpget.c:62:
+/usr/local/include/snmp/snmp_api.h:154: warning: `struct timeval' declared inside parameter list
+/usr/local/include/snmp/snmp_api.h:154: warning: its scope is only this definition or declaration,
+/usr/local/include/snmp/snmp_api.h:154: warning: which is probably not what you want.
+/usr/local/include/snmp/snmp_api.h:240: warning: `struct timeval' declared inside parameter list
+/bin/sh ./libtool cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpget snmpget.o version.o -rpath /usr/local/lib  -L/usr/local/lib -lsnmp 
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpget snmpget.o version.o -L/usr/local/lib -lsnmp -Wl,--rpath -Wl,/usr/local/lib
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H   -c snmpwalk.c -o snmpwalk.o
+In file included from /usr/local/include/snmp/snmp.h:60,
+                 from snmpwalk.c:61:
+/usr/local/include/snmp/snmp_api.h:154: warning: `struct timeval' declared inside parameter list
+/usr/local/include/snmp/snmp_api.h:154: warning: its scope is only this definition or declaration,
+/usr/local/include/snmp/snmp_api.h:154: warning: which is probably not what you want.
+/usr/local/include/snmp/snmp_api.h:240: warning: `struct timeval' declared inside parameter list
+/bin/sh ./libtool cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpwalk snmpwalk.o version.o -rpath /usr/local/lib  -L/usr/local/lib -lsnmp 
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpwalk snmpwalk.o version.o -L/usr/local/lib -lsnmp -Wl,--rpath -Wl,/usr/local/lib
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H   -c snmptranslate.c -o snmptranslate.o
+In file included from /usr/local/include/snmp/snmp.h:60,
+                 from snmptranslate.c:57:
+/usr/local/include/snmp/snmp_api.h:154: warning: `struct timeval' declared inside parameter list
+/usr/local/include/snmp/snmp_api.h:154: warning: its scope is only this definition or declaration,
+/usr/local/include/snmp/snmp_api.h:154: warning: which is probably not what you want.
+/usr/local/include/snmp/snmp_api.h:240: warning: `struct timeval' declared inside parameter list
+/bin/sh ./libtool cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmptranslate snmptranslate.o version.o -rpath /usr/local/lib  -L/usr/local/lib -lsnmp 
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmptranslate snmptranslate.o version.o -L/usr/local/lib -lsnmp -Wl,--rpath -Wl,/usr/local/lib
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H   -c snmpgetnext.c -o snmpgetnext.o
+In file included from /usr/local/include/snmp/snmp.h:60,
+                 from snmpgetnext.c:62:
+/usr/local/include/snmp/snmp_api.h:154: warning: `struct timeval' declared inside parameter list
+/usr/local/include/snmp/snmp_api.h:154: warning: its scope is only this definition or declaration,
+/usr/local/include/snmp/snmp_api.h:154: warning: which is probably not what you want.
+/usr/local/include/snmp/snmp_api.h:240: warning: `struct timeval' declared inside parameter list
+/bin/sh ./libtool cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpgetnext snmpgetnext.o version.o -rpath /usr/local/lib  -L/usr/local/lib -lsnmp 
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpgetnext snmpgetnext.o version.o -L/usr/local/lib -lsnmp -Wl,--rpath -Wl,/usr/local/lib
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H   -c snmptrap.c -o snmptrap.o
+In file included from /usr/local/include/snmp/snmp.h:60,
+                 from snmptrap.c:66:
+/usr/local/include/snmp/snmp_api.h:154: warning: `struct timeval' declared inside parameter list
+/usr/local/include/snmp/snmp_api.h:154: warning: its scope is only this definition or declaration,
+/usr/local/include/snmp/snmp_api.h:154: warning: which is probably not what you want.
+/usr/local/include/snmp/snmp_api.h:240: warning: `struct timeval' declared inside parameter list
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H   -c uptime.c -o uptime.o
+/bin/sh ./libtool cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmptrap snmptrap.o uptime.o version.o -rpath /usr/local/lib  -L/usr/local/lib -lsnmp 
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmptrap snmptrap.o uptime.o version.o -L/usr/local/lib -lsnmp -Wl,--rpath -Wl,/usr/local/lib
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H   -c snmptest.c -o snmptest.o
+In file included from /usr/local/include/snmp/snmp.h:60,
+                 from snmptest.c:59:
+/usr/local/include/snmp/snmp_api.h:154: warning: `struct timeval' declared inside parameter list
+/usr/local/include/snmp/snmp_api.h:154: warning: its scope is only this definition or declaration,
+/usr/local/include/snmp/snmp_api.h:154: warning: which is probably not what you want.
+/usr/local/include/snmp/snmp_api.h:240: warning: `struct timeval' declared inside parameter list
+/bin/sh ./libtool cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmptest snmptest.o version.o -rpath /usr/local/lib  -L/usr/local/lib -lsnmp 
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmptest snmptest.o version.o -L/usr/local/lib -lsnmp -Wl,--rpath -Wl,/usr/local/lib
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H   -c snmptrapd.c -o snmptrapd.o
+/bin/sh ./libtool cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmptrapd snmptrapd.o version.o -rpath /usr/local/lib  -L/usr/local/lib -lsnmp 
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmptrapd snmptrapd.o version.o -L/usr/local/lib -lsnmp -Wl,--rpath -Wl,/usr/local/lib
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H   -c snmptrap2.c -o snmptrap2.o
+In file included from /usr/local/include/snmp/snmp.h:60,
+                 from snmptrap2.c:57:
+/usr/local/include/snmp/snmp_api.h:154: warning: `struct timeval' declared inside parameter list
+/usr/local/include/snmp/snmp_api.h:154: warning: its scope is only this definition or declaration,
+/usr/local/include/snmp/snmp_api.h:154: warning: which is probably not what you want.
+/usr/local/include/snmp/snmp_api.h:240: warning: `struct timeval' declared inside parameter list
+/bin/sh ./libtool cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmptrap2 snmptrap2.o version.o -rpath /usr/local/lib  -L/usr/local/lib -lsnmp 
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmptrap2 snmptrap2.o version.o -L/usr/local/lib -lsnmp -Wl,--rpath -Wl,/usr/local/lib
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H   -c snmpdelta.c -o snmpdelta.o
+snmpdelta.c: In function `period_WaitForPeriod':
+snmpdelta.c:151: warning: passing arg 1 of `localtime' from incompatible pointer type
+snmpdelta.c: In function `peak_WaitForStart':
+snmpdelta.c:238: warning: passing arg 1 of `localtime' from incompatible pointer type
+snmpdelta.c: In function `main':
+snmpdelta.c:539: warning: passing arg 1 of `localtime' from incompatible pointer type
+/bin/sh ./libtool cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpdelta snmpdelta.o version.o -rpath /usr/local/lib  -L/usr/local/lib -lsnmp 
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpdelta snmpdelta.o version.o -L/usr/local/lib -lsnmp -Wl,--rpath -Wl,/usr/local/lib
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H   -c snmpset.c -o snmpset.o
+In file included from /usr/local/include/snmp/snmp.h:60,
+                 from snmpset.c:53:
+/usr/local/include/snmp/snmp_api.h:154: warning: `struct timeval' declared inside parameter list
+/usr/local/include/snmp/snmp_api.h:154: warning: its scope is only this definition or declaration,
+/usr/local/include/snmp/snmp_api.h:154: warning: which is probably not what you want.
+/usr/local/include/snmp/snmp_api.h:240: warning: `struct timeval' declared inside parameter list
+/bin/sh ./libtool cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpset snmpset.o version.o -rpath /usr/local/lib  -L/usr/local/lib -lsnmp 
+cc -O3 -I/usr/local/include -I. -DHAVE_CONFIG_H -o snmpset snmpset.o version.o -L/usr/local/lib -lsnmp -Wl,--rpath -Wl,/usr/local/lib
+Make all in /usr/obj/ng/snmpapps/013 successful
+Making install in /usr/obj/ng/snmpapps/013
+make prefix=/afs/andrew.cmu.edu/system/dest/@sys/ng/snmpapps/013 exec_prefix=/afs/andrew.cmu.edu/system/dest/@sys/ng/snmpapps/013 install
+/usr/local/bin/perl5 make-manpages.pl snmpstatus snmpget snmpwalk snmptranslate snmpgetnext snmptrap snmptest snmptrapd snmptrap2 snmpdelta snmpset	
+Generating manpage for snmpstatus...Done.
+Generating manpage for snmpget...Done.
+Generating manpage for snmpwalk...Done.
+Generating manpage for snmptranslate...Done.
+Generating manpage for snmpgetnext...Done.
+Generating manpage for snmptrap...Done.
+Generating manpage for snmptest...Done.
+Generating manpage for snmptrapd...Done.
+Generating manpage for snmptrap2...Done.
+Generating manpage for snmpdelta...Done.
+Generating manpage for snmpset...Done.
+/usr/local/bin/mkdirhier /afs/andrew.cmu.edu/system/dest/@sys/ng/snmpapps/013/bin /afs/andrew.cmu.edu/system/dest/@sys/ng/snmpapps/013/man/man1
+Installing snmpstatus...
+Installing snmpget...
+Installing snmpwalk...
+Installing snmptranslate...
+Installing snmpgetnext...
+Installing snmptrap...
+Installing snmptest...
+Installing snmptrapd...
+Installing snmptrap2...
+Installing snmpdelta...
+Installing snmpset...
+Install complete
+rm -rf /usr/obj/ng/snmpapps/013
+mkdir /usr/obj/ng/snmpapps/013
+Links removed

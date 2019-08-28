@@ -1,0 +1,55 @@
+DATABASE SUPPORT HAS NOT BEEN COMPLETED. SEE README.DATABASES.
+
+# MySQL Database Setup for SNIPS
+# ====================
+#
+#   You can simply direct this file to mysql as STDIN:
+#   	mysql -u root -p < mysql_create.sql
+#
+# These commands will setup a user called 'snipsmgr' with a password of
+# 'snipspasswd' and give it access to the 'snips' database.
+
+CONNECT mysql;
+
+DELETE FROM user WHERE user LIKE 'snipsmgr';
+DELETE from db   WHERE user LIKE 'snipsmgr';
+DROP DATABASE IF EXISTS snips;
+
+INSERT INTO user (host, user, password) 
+	VALUES ('localhost', 'snipsmgr', password('snipspassword') );
+
+INSERT INTO db ( host, db, user, select_priv, insert_priv, update_priv,
+		delete_priv, create_priv, drop_priv )
+	VALUES ('localhost', 'snips', 'snipsmgr', 'Y', 'Y', 'Y', 'Y', 
+		'Y', 'Y');
+CREATE DATABASE snips;
+CONNECT snips;
+
+CREATE TABLE snips_events (
+	sender char(40) NOT NULL,
+	device_name char(128) NOT NULL, device_addr char(128),
+	device_subdev char(128) DEFAULT '' NOT NULL,
+	var_name char(64) NOT NULL,
+	var_value integer, var_threshold integer,
+	var_units char(64),
+	severity integer, loglevel integer, state integer, rating integer,
+	eventtime integer, polltime integer,
+	op integer, id integer,
+	UNIQUE INDEX uniq (sender,device_name,device_subdev,var_name),
+	INDEX (sender), INDEX (device_name), INDEX (device_subdev),
+	INDEX (var_name)
+	);
+
+FLUSH  PRIVILEGES;
+
+INSERT INTO snips_events VALUES ('testSender', 'testDevice2', 'testAddr',
+	'testSubdev', 'testVar', 567, 890, 'testUnits', 3, 4, 123, 1111,
+	98123123, 98456456, '123456789', '987654321');
+
+#
+# select * from snips_events where device_name = 'testDevice2';
+# delete * from snips_events where device_name = 'testDevice2';
+#
+# QUIT;
+#
+#	mysqladmin -u root -p reload

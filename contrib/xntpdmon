@@ -1,0 +1,257 @@
+#!/usr/local/bin/perl 
+#
+# $Header: /home/cvsroot/snips/contrib/xntpdmon,v 1.1.1.1 2001/09/22 15:03:54 vikas Exp $
+#
+#     xntpdmon - Monitor NTP using 'xntpdc'
+#
+# (There is a C version of ntpmon provided, which can also be used).
+#
+#	Copyright 1995,1997. Mathias Koerber, Mathias.Koerber@swi.com.sg
+# 	based on modemmon Copyright 1994. Vikas Aggarwal,  vikas@navya.com
+#
+# This program uses 'xntpdc -c peer' to do all its work and thus
+# requires the snips host to ntp-peer with all other hosts being
+# monitored.
+#
+# Edit the value of '$command' and point to location of your xntpdc command.
+#
+#
+###
+###
+###
+#
+# Snips event elements used:
+#   sender                     "ntpmon"
+#   severity                   as read from the config file
+#   site
+#    name                      the ntp server name
+#    addr                      the ntp server IP address
+#   var                       
+#    name                      "Stratum"
+#    value                     1 means at Info level
+#    threshold                 as read from the config file
+#    units                     always "Stratum"
+#   var
+#    name                      "Offset"
+#    value                     milliseconds
+#    threshold                 as read from the config file
+#    units                     always "MilliSeconds"
+#
+## 
+##
+
+#
+#
+############################
+## Variables customization #  overrides values in the snipslib.pl library
+############################
+$command = "/usr/local/bin/xntpdc -c peer";  SET_THIS
+
+$varname{"stratum"}="Stratum";
+$varunits{"stratum"}="Stratum" ;	# the var.units field in EVENT struct
+$w_thresh{"default\tdefault\tstratum"} = 5;
+$e_thresh{"default\tdefault\tstratum"} = 8;
+$c_thresh{"default\tdefault\tstratum"} = 11;
+
+$varname{"offset"}="Offset";
+$varunits{"offset"}="ms" ;		# the var.units field in EVENT struct
+$w_thresh{"default\tdefault\toffset"} = 1000;
+$e_thresh{"default\tdefault\toffset"} = 5000;
+$c_thresh{"default\tdefault\toffset"} = 7000;
+
+$varname{"dispersion"}="Dispersion";
+$varunits{"dispersion"}="ms" ;		# the var.units field in EVENT struct
+$w_thresh{"default\tdefault\tdispersion"} = 1000;
+$e_thresh{"default\tdefault\tdispersion"} = 5000;
+$c_thresh{"default\tdefault\tdispersion"} = 10000;
+
+$varname{"reach"}="Reach";
+$varunits{"reach"}="count" ;		# the var.units field in EVENT struct
+$thresh{"default\tdefault\treach"} = 50;
+
+
+$sleepint=60*5;       			# Seconds to sleep between tries.
+############################
+$debug = 0;				# set to 1 for debugging output
+$libdebug = 0;				# set to 1 for debugging output
+
+require  "snipslib.pl" ;
+
+$maxseverity = $E_WARNING;
+#$maxseverity = $E_ERROR;
+
+# Read the config file. Use '\t' as a separator for 'item'
+sub readconf {
+
+    open(CONFIG,"<$cfile")||die("Couldn't find $cfile, exiting");
+    while(<CONFIG>)
+    {
+	chop;
+	if(/^\s*#/) {next;}   # skip comments
+	if(/^\s*$/) {next;}   # skip blank lines
+	if(/^interval\s*(\d+)/)	# sleep interval in seconds
+	 {
+		$sleepint=$1;
+		next;
+	}
+	if (/\s*(\S+)\s+(\S+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$/)
+	{
+	    $item=lc("$1\t$1\t$2") ;	 # the name and variable
+	    $w_thresh{"$item"} = $3; # Warning level
+	    $e_thresh{"$item"} = $4; # Warning level
+	    $c_thresh{"$item"} = $5; # Warning level
+	}
+
+	if (/\s*(\S+)\s+(\S+)\s+(\d+)\s*$/)
+	{
+	    $item=lc("$1\t$1\t$2") ;	 # the name and variable
+	    $thresh{"$item"} = $3; # Warning level
+	    $maxseverity{$item} = $maxseverity;
+	}
+	else {print "Ignoring illegal line: $_\n";}
+
+    }	# end while(CONFIG)
+
+    close(CONFIG);
+
+	# also run xntpdc to get all hosts...
+
+	open(XNTPDC,"$command |");
+	while (<XNTPDC>) {
+		/^\s+remote\s+/ && next;	# skip
+		/^====/ && next;
+		/^.local\(0\)/i && next;
+		/^.([^\s]+)\s+/ && do {
+			$host = $1;
+			if ($host !~ /^\s*\d+\.\d+\.\d+\.\d+\s*$/) {
+				($host)	= ($host =~ /^([^\.]+)/);
+				$host 	= lc $host;
+				}
+			push(@items,"$host\t$host\tstratum");
+			push(@items,"$host\t$host\toffset");
+			push(@items,"$host\t$host\tdispersion");
+			push(@items,"$host\t$host\treach");
+			}
+		}
+	close(XNTPDC);
+
+    if(0>$#items){die("Nothing to monitor in $cfile, exiting")};
+    if ($debug) {
+	print "Items are:\n"; foreach (@items) { print "\t$_\n" } ;
+    }
+}				# end: readconf
+
+## Check state of each timeserver
+#
+sub dotest {
+	open(XNTPDC,"$command |");
+	while (<XNTPDC>) {
+		/^\s+remote\s+/ && next;	# skip
+		/^====/ && next;
+		/^.LOCAL\(0\)/i && next;
+		/^.([^\s]+)\s+\d+\.\d+\.\d+\.\d+\s+(\d+)\s+\d+\s+(\d+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s*$/ && do {
+			# only IP address known...
+			$host = $1;
+			$stratum= $2;
+			$reach	= $3;
+			$delay	= (abs($4)*1000);
+			$offset	= (abs($5)*1000);
+			$disp	= (abs($6)*1000);
+			if ($host !~ /^\s*\d+\.\d+\.\d+\.\d+\s*$/) {
+				($host)	= ($host =~ /^([^\.]+)/);
+				$host 	= lc $host;
+				}
+			};
+
+		$var = "stratum";
+		$item = "$host\t$host\t$var";
+		$varname{"$item"} = $var;
+		$varunits{"$item"} = $varunits{$var};
+		#$varthres{"$item"} = ($thresh{"$item"} || $thresh{"default\tdefault\t$var"});
+		#$isok = ($stratum < $varthres{$item});
+		($isok, $varthres{$item}, $maxsev) = 
+		    &calc_status($stratum, ($w_thresh{$item} || $w_thresh{"default\tdefault\t$var"}), 
+					   ($e_thresh{$item} || $e_thresh{"default\tdefault\t$var"}), 
+                                           ($c_thresh{$item} || $c_thresh{"default\tdefault\t$var"}));
+		update_event($item,$isok,$stratum,$maxsev);
+	
+		$var = "offset";
+		$item = "$host\t$host\t$var";
+		$varname{"$item"} = $var;
+		$varunits{"$item"} = $varunits{$var};
+		#$varthres{"$item"} = ($thresh{"$item"} || $thresh{"default\tdefault\t$var"});
+		#$isok = ($offset < $varthres{"$item"});
+		($isok, $varthres{$item}, $maxsev) = 
+		    &calc_status($offset,  ($w_thresh{$item} || $w_thresh{"default\tdefault\t$var"}), 
+					   ($e_thresh{$item} || $e_thresh{"default\tdefault\t$var"}), 
+                                           ($c_thresh{$item} || $c_thresh{"default\tdefault\t$var"}));
+		update_event($item,$isok,$offset,$maxsev);
+
+		$var = "dispersion";
+		$item = "$host\t$host\t$var";
+		$varname{"$item"} = $var;
+		$varunits{"$item"} = $varunits{$var};
+		#$varthres{"$item"} = ($thresh{"$item"} || $thresh{"default\tdefault\t$var"});
+		#$isok = ($disp < $varthres{"$item"});
+		($isok, $varthres{$item}, $maxsev) = 
+		    &calc_status($disp,    ($w_thresh{$item} || $w_thresh{"default\tdefault\t$var"}), 
+					   ($e_thresh{$item} || $e_thresh{"default\tdefault\t$var"}), 
+                                           ($c_thresh{$item} || $c_thresh{"default\tdefault\t$var"}));
+		update_event($item,$isok,$disp,$maxsev);
+
+		$var = "reach";
+		$item = "$host\t$host\t$var";
+		$varname{"$item"} = $var;
+		$varunits{"$item"} = $varunits{$var};
+		$varthres{"$item"} = ($thresh{"$item"} || $thresh{"default\tdefault\t$var"});
+		$isok = ($reach > $varthres{"$item"});
+		update_event($item,$isok,$reach,$maxseverity);
+		}
+	close(XNTPDC);
+	     
+}	# end &dotest()
+
+
+
+###
+### main
+###
+
+
+    &snips_startup;
+    &readconf;
+    
+    foreach $item (@items) {
+        local ($host, $addr, $junk) = split( /\t/, $item );
+	$varname=$varname{$item};
+	$varunits=$varunits{$item};
+        &init_event ($host, $addr, $item);      # fill in initial values
+    }
+
+    while (1)
+    {
+        local ($stime, $deltatime);
+
+        $stime = time;          # time starting tests
+
+	&dotest();
+
+        open(OEVENTS,">$datafile");
+        foreach $item (@items)
+        {
+            if(!$forget{$item})
+            {
+                &writeevent(OEVENTS, $item);
+            }
+        }
+        close(OEVENTS);
+
+        $deltatime = time - $stime;             # time to do tests
+
+        if ($sleepint > $deltatime) { sleep($sleepint - $deltatime); }
+
+    }                           # end: while(1)
+    
+
+#
+

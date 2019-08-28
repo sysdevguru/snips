@@ -1,0 +1,61 @@
+.\"$Header: /home/cvsroot/snips/man/radiusmon.8,v 1.0 2001/07/08 22:31:48 vikas Exp $"
+.\"
+.TH RADIUSMON 8 "June 2000"
+.SH NAME
+radiusmon \- Radius daemon monitor
+.SH SYNOPSIS
+.B radiusmon
+[
+.B \-a
+] [
+.B \-d
+] [
+.B \-o
+.I output-file
+] [
+.I config-file
+] [
+.B \-x
+]
+.SH DESCRIPTION
+.LP
+.B radiusmon
+is part of the SNIPS network monitoring package, used for
+testing a radius server and making sure that it responds
+to queries.
+.PP
+The program reads in a list of devices to query from a config file at startup
+and then sends an AUTH radius packet to the remote server.
+.PP
+If compiled with IGNORE_AUTHCODE, it will assume that any response from
+the server (even a deny) indicates that the radius server is OK. Else,
+it will see if the response is an okay (i.e. password was valid).
+.\"
+.SH OPTIONS
+.TP 20
+.B \-a
+autoreload the configuration file if it is updated since last reload and if
+it is at least 1 minute old.
+.TP
+.B \-d
+selects verbose debugging output mode. Specify multiple times to increase the
+debug level.
+.TP
+.BI "\-o" " output file"
+Name of the file to which to write the output.  This file is 
+.I not
+in human-readable format, and is intended to be processed by the 
+.BR snipstv (1)
+display program.
+.TP
+.B \-x
+extension that is added to the program name to create the config file name
+and output file name.
+.TP
+.I config-file
+This file lists the hosts to be queried for the nameserver. A sample config
+file is provided with the software.
+.\"------------------------------------
+.SH CAVEATS
+Radius uses UDP, and this program does not do any retrying.
+

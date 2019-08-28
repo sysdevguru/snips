@@ -1,0 +1,640 @@
+## $Id: BUGS,v 1.3 2002/01/30 05:39:17 vikas Exp $
+			      SNIPS Known BUGS
+			      -----------------
+
+hostmon
+-------
+ - error in parsing client data causes variables to show up as Critical
+   (especially DFspace). Probably due to errors in regexp pattern.
+   Should be fixed in v1.2
+
+genweb.cgi
+----------
+When using nsmon, the Device name of dns servers in the web report are
+all in the format:   "domain name"+"dns server name"
+
+	e.g. "pacific.net.sg+ns5"
+
+And it seems your genweb.cgi reads & compares the 'updates' file in the
+fashion of "dns server name" only. Such that all the records in updates
+are not matched. Here is a typical line from 'updates'
+
+  pacific.net.sg+ns5:203.120.92.139:named-status  dont care -nocol01
+
+(jonathantse@pacific.net.sg)
+
+genweb.cgi
+----------
+i get the SNIPS webpage as expected if i click on the WARNING button
+then click on the ERROR button the url slowly gets bigger:
+ 
+http://snips.graphon.com/cgi-bin/genweb.cgi?view=Error&view=Warning&view=Warning
++&view=Warning&view=Warning
+ 
+eventually it can be several hundred characters long. i just wanted
+to know if this is expected behavior or if i have something
+configured incorrectly.
+
+(nate amsden, subscriptions@graphon.com, Sep-26-2001)
+
+
+From subscriptions@graphon.com Thu Sep 27 09:55:49 2001
+Received: from graphon.com (fury.graphon.com [192.168.50.119])
+        by mail-wa.graphon.com (8.12.0.Beta10/8.12.0.Beta10/Debian 8.12.0.Beta10) with ESMTP id f8QNoJo7032146
+        for <snips-users@navya.com>; Wed, 26 Sep 2001 16:50:19 -0700
+Message-ID: <3BB26998.CB722203@graphon.com>
+Date: Wed, 26 Sep 2001 16:49:44 -0700
+From: Nate Amsden <subscriptions@graphon.com>
+X-Mailer: Mozilla 4.76 [en] (X11; U; Linux 2.2.19 i686)
+X-Accept-Language: en
+MIME-Version: 1.0
+To: snips-users@navya.com
+Subject: [snips-users] URL length - is this normal?
+Content-Type: text/plain; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+X-Virus-Scanned: by AMaViS perl-11
+Sender: owner-snips-users@navya.com
+Precedence: normal
+X-Mozilla-Status: 8003
+X-Mozilla-Status2: 00000000
+X-UIDL: +MJ!!6cO!!3L@"!COa"!
+Status: RO
+Content-Length: 1283
+Lines: 43
+
+when i go to
+http://snips.graphon.com/cgi-bin/genweb.cgi
+(not available via the internet)
+
+i get the SNIPS webpage as expected if i click on the WARNING button
+then click on the ERROR button the url slowly gets bigger:
+
+http://snips.graphon.com/cgi-bin/genweb.cgi?view=Error&view=Warning&view=Warning&view=Warning&view=Warning
+
+eventually it can be several hundred characters long. i just wanted
+to know if this is expected behavior or if i have something
+configured incorrectly.
+
+as far as the web interface is concerned:
+
+/home/snips/public_html <-- main html/gifs
+/home/snips/cgi_bin <-- cgi
+
+I have ScriptAlias /cgi-bin/ /home/snips/cgi-bin/
+for the virtualhost in apache's config.
+
+it seems to be working, eventually i get this error from apache:
+Request-URI Too Large
+
+The requested URL's length exceeds the capacity limit for this server.
+
+request failed: URI too long
+
+and for some reason the URL is totally blacked out in the netscape
+location bar(netscape 4.76/linux). never seen it do that, its just
+a black bar accross the url itself. really weird :) so i guess
+something must not be configured right.
+
+any hints as to what i may of missed? thanks!
+
+nate
+
+
+-- 
+Nate Amsden
+System Administrator
+GraphOn
+http://www.graphon.com
+
+
+From - Mon Oct 01 18:20:34 2001
+Received: (avikas@localhost) by server1.navya.com (8.11.6) id f91GH3W03964 for snips-users-outlist; Mon, 1 Oct 2001 12:17:03 -0400 (EDT)
+Received: from lon2.telecity.net (lon2.telecity.net [212.212.143.190] (may be forged)) by server1.navya.com (8.11.6) id f91GH2E03958 for <snips-users@navya.com>; Mon, 1 Oct 2001 12:17:02 -0400 (EDT)
+Received: by LON2 with Internet Mail Service (5.5.2448.0)
+	id <SK156N6W>; Mon, 1 Oct 2001 17:12:06 +0100
+Message-ID: <318DDAE1E5E9D311A63C00508B9B22FA01703B01@LON2>
+From: Steve.Daltrey@telecity.co.uk
+To: snips-users@navya.com
+Subject: [snips-users] snmpgeneric output
+Date: Mon, 1 Oct 2001 17:11:56 +0100 
+MIME-Version: 1.0
+X-Mailer: Internet Mail Service (5.5.2448.0)
+Content-Type: text/plain;
+	charset="iso-8859-1"
+Sender: owner-snips-users@navya.com
+Precedence: normal
+X-Mozilla-Status: 8000
+X-Mozilla-Status2: 00000000
+X-UIDL: 3S>!!K#_"!!LO"!$:6!!
+Status: RO
+Content-Length: 1075
+Lines: 36
+
+I have upgraded from NOCOL v4.2.2 to SNIPS v1.1. 
+
+The problem I have is that my snmpgeneric output is saying NOTSET for the
+variable/value. I have set this up in my snmpgeneric-confg file as below.
+
+PWR_SUPPLY1 SW1-CORE-HBX-B .1.3.6.1.4.1.1991.1.1.1.2.1.1.3.1 PowerStatus
+public 3 3 3
+
+Then the output is:
+
+373 W PWR_SUPPLY1 SW1-CORE-HBX-B NOTSET= 2 10/01 16:20 snmpgeneric 
+
+Can anyone help me in getting the variable to show on the NOCOL output web
+page?
+
+thanks
+
+Steve Daltrey
+Network Engineer
+Operations
+TeleCity London
+www.telecity.net
+
+From vikas  Tue Nov 13 09:51:45 2001
+Received: from relay.9telecom.fr (relay.9telecom.fr [212.30.115.154]) by server1.navya.com (8.11.6) id fADEpig88642 for <snips-users@navya.com>; Tue, 13 Nov 2001 09:51:45 -0500 (EST)
+Received: from nr0u0017 ([212.30.115.153]) by relay.9telecom.fr
+          (Post.Office MTA v3.5.3 release 223 ID# 0-0U10L2S100V35)
+          with SMTP id fr for <snips-users@navya.com>;
+          Tue, 13 Nov 2001 15:50:38 +0100
+Received: Serveur 9 Telecom
+Received: Serveur 9 Telecom
+Message-ID: <41F23CBD7A4CD1119AEE00805F0DF19702B27AF8@bn0s0002.gamma.9telecom.fr>
+From: "BOUFFARD, Christophe" <Christophe.BOUFFARD@9telecom.fr>
+To: "'snips-users@navya.com'" <snips-users@navya.com>
+Subject: SNMP Monitors
+Date: Tue, 13 Nov 2001 15:51:09 +0100
+MIME-Version: 1.0
+X-Mailer: Internet Mail Service (5.5.2448.0)
+Content-Type: text/plain;
+	charset="iso-8859-1"
+Content-Transfer-Encoding: quoted-printable
+Status: RO
+Content-Length: 500
+Lines: 15
+
+Hi,
+I have any problems with snmpgeneric and snmpmon with snips1.1!
+The script don't recognize the variable (NOTSET in the web browser) and =
+the
+result has always stayed at z=E9ro
+I want to monitor the router CPU withe the MIB file =
+"CISCO-PROCESS-MIB".
+then, the snmpgeneric-confg is:
+CPU-RO	192.168.16.248	.1.3.6.1.4.1.9.9.109.1.1.1.1.3.1	CPUTotal5sec
+public		25	50	75
+Is there an error?
+therefore the rcisco script don't running.
+Please, give me a solution.
+Christophe Bouffard
+
+
+From - Mon Oct 29 10:29:55 2001
+Received: from fubar.loosenut.com (sdsl-66-80-0-211.dsl.sca.megapath.net [66.80.0.211]) by server1.navya.com (8.11.6) id f9T8D5U21857 for <snips-users@navya.com>; Mon, 29 Oct 2001 03:13:06 -0500 (EST)
+Received: (from russell@localhost)
+	by fubar.loosenut.com (8.9.3/8.9.3) id AAA14452
+	for snips-users@navya.com; Mon, 29 Oct 2001 00:04:25 -0800 (PST)
+Date: Mon, 29 Oct 2001 00:04:23 -0800
+From: Russell Van Tassell <russell@loosenut.com>
+To: snips-users@navya.com
+Subject: [snips-users] hostmon-client
+Message-ID: <20011029000423.A13988@loosenut.com>
+Mime-Version: 1.0
+Content-Type: text/plain; charset=us-ascii
+Sender: owner-snips-users@navya.com
+Precedence: normal
+X-Mozilla-Status: 8001
+X-Mozilla-Status2: 00000000
+X-UIDL: P~~"!EA##!p"i!!f)"#!
+Status: RO
+Content-Length: 1342
+Lines: 36
+
+
+I think I've reported this a couple of times in the past, but the
+hostmon-client is still b0rken for clients that don't use NFS and have
+gone so far as to disable its use... it likes to complain every poll
+interval:
+
+  nfsstat: kernel is not configured with the client nfs and rpc code.
+
+Personally, I'd like to not have to remember which hosts this is
+configured for and which it isn't... likewise, if it's not there, the
+client should remember it and then not complain every few minutes (ie.
+once is more than enough).
+
+Another issue... hostmon-client does not seem to properly check for the
+presence of snipsperl.conf like the other Perl monitors nicely do... ok,
+it checks, but perhaps it should check its own directory first (and then
+use it if it's there) and maybe let the "global" one (normally found in
+/usr/local/snips or the like) override it or supplement it.  Yes, I
+realize that this sort of "feature" is probably largely debately on the
+pros and cons of doing that this way, particularly because I tend to
+distribute my hostmons by simply tar'ing up the directories and moving
+them over (probably should move a keepalive over as well or something).
+
+Ok, I'll quiet down like a good little user, now, before I get majorly
+LART'd... HeHe
+
+Russell
+
+-- 
+Russell M. Van Tassell
+russell@loosenut.com
+
+From vikas  Thu Dec 13 08:54:15 2001
+Received: from mx4.bertelsmann.de (mx4.bertelsmann.de [62.52.71.35]) by server1.navya.com (8.11.6) id fBDDsE455770 for <snips-users@navya.com>; Thu, 13 Dec 2001 08:54:15 -0500 (EST)
+Received: by mx4.bertelsmann.de with Internet Mail Service (5.5.2653.19)
+	id <YZDKPC0S>; Thu, 13 Dec 2001 14:52:49 +0100
+Message-ID: <295C5EDF1D27D411A76900508B62578104B7D9B9@debage55.bertelsmann.de>
+From: Thomas.Leiber@Bertelsmann.de
+To: snips-users@navya.com
+Subject: Problem with trapmon
+Date: Thu, 13 Dec 2001 14:52:47 +0100
+MIME-Version: 1.0
+X-Mailer: Internet Mail Service (5.5.2653.19)
+Content-Type: text/plain
+Status: RO
+Content-Length: 354
+Lines: 15
+
+Hi,
+
+I am running trapmon and it works quite good.
+
+But I have the following problems:
+
+1. The receiced traps do not expire at all.
+
+2. If I try to look at the trapmon-output file with snipstv or
+   display_snips_datafile I get the following:
+
+../data/trapmon-output: Data format version incompatible (is 0, not 1)
+
+Any ideas out there?
+
+
+From - Thu Dec 20 11:46:49 2001
+Received: (avikas@localhost) by server1.navya.com (8.11.6) id fBKGFxf59509 for snips-users-outlist; Thu, 20 Dec 2001 11:15:59 -0500 (EST)
+Received: from uk.psi.com (pool-141-154-77-92.bos.east.verizon.net [141.154.77.92]) by server1.navya.com (8.11.6) id fBKGFwc59503 for <snips-users@navya.com>; Thu, 20 Dec 2001 11:15:58 -0500 (EST)
+Message-ID: <3C220EBF.93532F45@uk.psi.com>
+Date: Thu, 20 Dec 2001 11:15:59 -0500
+From: Steve Foster <fosters@uk.psi.com>
+X-Mailer: Mozilla 4.79 [en] (Windows NT 5.0; U)
+X-Accept-Language: en,pdf
+MIME-Version: 1.0
+To: snips-users@navya.com
+Subject: [snips-users] config files limitations in radiusmon
+Content-Type: text/plain; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+Sender: owner-snips-users@navya.com
+Precedence: normal
+X-Mozilla-Status: 8003
+X-Mozilla-Status2: 00000000
+X-UIDL: @%n"!@5N!!-PG!!Sha"!
+Status: RO
+Content-Length: 1050
+Lines: 30
+
+Hi,
+
+has anyone come across any config files limitations in radiusmon, i have
+currently a number of hosts ( 7 to be exact) in my config file
+(radiusmon-confg) , and the system cycles through them fine, and reports
+they are all up and running correctly, however when i add another entry to
+the config file and then reload radiusmon, i find the other hosts start
+misbehaving and being marked as down, when they are in fact
+not....removing
+the new entry causes the hosts to all behave again....and even removing a
+previously listed host and adding the new one works fine, it is just when
+there are over 7 hosts it gets nasty...
+
+the character count on just the host entries comes to 582 chars, and even
+with all of the comments etc, comes to only 1505, and the longest line is
+only 94 characters...
+
+i am not sure if it is a character limit or what....anybody else had any
+issue with the config files??
+
+Cheers
+
+Steve
+Steve Foster
+Senior Systems Administrator
+PSINet Europe
+Work: +44 (1223) 577322
+Mobile: +44 (7720) 425911
+
+From - Mon Dec 31 21:16:33 2001
+Received: (avikas@localhost) by server1.navya.com (8.11.6) id fBVGDoG77706 for snips-users-outlist; Mon, 31 Dec 2001 11:13:50 -0500 (EST)
+Received: from nts.nts.umn.edu (nts.nts.umn.edu [128.101.4.1]) by server1.navya.com (8.11.6) id fBVGDnN77700 for <snips-users@navya.com>; Mon, 31 Dec 2001 11:13:49 -0500 (EST)
+Received: (from peiffer@localhost)
+	by nts.nts.umn.edu (8.9.1a/8.9.1) id KAA13475
+	for snips-users@navya.com; Mon, 31 Dec 2001 10:13:48 -0600 (CST)
+Received: (from peiffer@localhost)
+	by nts.nts.umn.edu (8.9.1a/8.9.1) id KAA07955;
+	Sat, 29 Dec 2001 10:25:15 -0600 (CST)
+From: Tim Peiffer <peiffer@nts.umn.edu>
+Message-Id: <200112291625.KAA07955@nts.nts.umn.edu>
+Subject: [snips-users] syslogmon configurations
+To: snips-users@navya.com
+Date: Sat, 29 Dec 2001 10:25:15 -0600 (CST)
+CC: peiffer@nts.umn.edu
+X-Mailer: ELM [version 2.4ME+ PL66 (25)]
+MIME-Version: 1.0
+Content-Type: text/plain; charset=US-ASCII
+Content-Transfer-Encoding: 7bit
+Sender: owner-snips-users@navya.com
+Precedence: normal
+X-Mozilla-Status: 8001
+X-Mozilla-Status2: 00000000
+X-UIDL: TdD"!MU/"!?^f!!mJ5!!
+Status: RO
+Content-Length: 2848
+Lines: 65
+
+I have a monitoring process that generates usage stats on DHCP lease pools.
+I would like to have SNIPS detect and set a value.  I seem to be having 
+problems in the set up of the detection.  The syslogmon process was 
+restarted since reconfiguration, and I am still not seeing this in my
+display.  What am I doing wrong, and can I set the variable=value from 
+the monitor? As a secondary question, what are the limits on the address
+length?
+
+Looking for Address: 134.84.134.0 Variable=value:DhcpAvail=30
+Alternate Address: ntc-xxx-Vlan775:134.84.134.0 Variable=value:DhcpAvail=30
+I am running snips-1.2beta.  I have set $debug=3 in the script.  Ouput
+from run/syslogmon.error is included below as well.
+
+Tim Peiffer 	    	    	    	peiffer@nts.umn.edu
+Operations Manager - Engineering Automation
+Networking and Telecommunications Operations
+University of Minnesota                 +1 612 626 7884 desk
+2218 University Ave			+1 612 625 0006 problems
+           				+1 612 626 1002 fax
+Minneapolis MN 55455, USA          
+
+Example logs:
+Dec 29 08:17:24 engineer8 peiffer: user.notice ntc-1-rsm.rswitch-Vlan775:134.84.134.0 dhcp watch abandon 30
+Dec 29 08:17:24 engineer8 peiffer: user.notice ntc-1-rsm.rswitch-Vlan795:160.94.217.72 dhcp watch abandon 40
+Dec 29 09:16:52 engineer8 peiffer: user.notice ntc-1-rsm.rswitch-Vlan775:134.84.134.0 dhcp watch abandon 30
+
+Example etc/syslogmon-confg lines:
+DhcpAvail       *               warning         (\S+:\d+\.\d+\.\d+\.\d+)\s+dhcp\s+watch\s+avail.*
+DhcpAvail       *               error           (\S+:\d+\.\d+\.\d+\.\d+)\s+dhcp\s+below.*
+DhcpAbandon     *               warning         (\S+:\d+\.\d+\.\d+\.\d+)\s+dhcp\s+watch\s+abandon.*
+DhcpAbandon     *               error           (\S+:\d+\.\d+\.\d+\.\d+)\s+dhcp\s+excessive.*
+
+
+Date Fri Dec 28 20:39:32 CST 2001
+syslogmon- Reading global config file /usr/local/snips/etc/snips.conf
+(syslogmon).. locked pid-file, started new process (pid=18030)
+syslogmon: removing data, pid file.... Done
+Items are:
+        MemParity
+        Diskerr
+        Diskerr
+        SwitchUser
+        NfsServer
+        Qpage
+        DhcpAvail
+        DhcpAvail
+        DhcpAbandon
+        DhcpAbandon
+Logfiles :
+        /var/log/all.log
+        /var/log/messages
+        /var/log/maillog
+Opening log file : /var/log/all.log,  Size : 1650295
+Opening log file : /var/log/messages,  Size : 30255
+Opening log file : /var/log/maillog,  Size : 798053
+Opening log file : /var/log/all.log,  Size : 1652427
+Opening log file : /var/log/messages,  Size : 31028
+Opening log file : /var/log/maillog,  Size : 798692
+[...]
+Opening log file : /var/log/maillog,  Size : 380165
+Opening log file : /var/log/all.log,  Size : 782636
+Opening log file : /var/log/messages,  Size : 38026
+Opening log file : /var/log/maillog,  Siz
+
+From - Fri Jan 04 12:52:15 2002
+Received: (avikas@localhost) by server1.navya.com (8.11.6) id g04GpbN69467 for snips-users-outlist; Fri, 4 Jan 2002 11:51:37 -0500 (EST)
+Received: from heimdall.ttsg.com (wallstreet34.kickstartusa.com [65.105.161.248]) by server1.navya.com (8.11.6) id g04GpTO69447 for <nocol-users@navya.com>; Fri, 4 Jan 2002 11:51:29 -0500 (EST)
+Received: (from tuc@localhost)
+	by heimdall.ttsg.com (8.9.3/8.9.3) id LAA01385
+	for nocol-users@navya.com; Fri, 4 Jan 2002 11:51:27 -0500 (EST)
+From: Tuc <tuc@ttsg.com>
+Message-Id: <200201041651.LAA01385@heimdall.ttsg.com>
+Subject: [snips-users] Expect alot more from me
+To: nocol-users@navya.com
+Date: Fri, 4 Jan 2002 11:51:27 -0500 (EST)
+X-Mailer: ELM [version 2.5 PL6]
+MIME-Version: 1.0
+Content-Type: text/plain; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+Sender: owner-snips-users@navya.com
+Precedence: normal
+X-Mozilla-Status: 8003
+X-Mozilla-Status2: 00000000
+X-UIDL: ~0[!!+\f"!'Pa"!'7k"!
+Status: RO
+Content-Length: 625
+Lines: 19
+
+Hi,
+
+We are upgrading our master monitoring server from an OLD OLD OLD
+copy of Nocol to the latest Snips.... You'll be seeing ALOT from me...
+
+We have a brand new machine set up, and its only logging a little
+bit of stuff, however, we got this from syslogmon :
+
+  Previous error file for syslogmon :
+
+  syslogmon- Reading global config file /usr/local/etc/snips/etc/snips.conf
+  (syslogmon).. locked pid-file, started new process (pid=12226)
+  Out of memory!
+
+
+Any ideas? We've never had Nocols syslogmon complain, and it
+goes through 50-60Meg of logs a day.
+
+		Thanks, Tuc/TTSG Internet Services, Inc.
+
+
+From - Fri Jan 04 12:52:21 2002
+Received: (avikas@localhost) by server1.navya.com (8.11.6) id g04Gxbm69929 for snips-users-outlist; Fri, 4 Jan 2002 11:59:37 -0500 (EST)
+Received: from heimdall.ttsg.com (wallstreet34.kickstartusa.com [65.105.161.248]) by server1.navya.com (8.11.6) id g04GxVI69914 for <nocol-users@navya.com>; Fri, 4 Jan 2002 11:59:31 -0500 (EST)
+Received: (from tuc@localhost)
+	by heimdall.ttsg.com (8.9.3/8.9.3) id LAA01564
+	for nocol-users@navya.com; Fri, 4 Jan 2002 11:59:30 -0500 (EST)
+From: Tuc <tuc@ttsg.com>
+Message-Id: <200201041659.LAA01564@heimdall.ttsg.com>
+Subject: [snips-users] Etherload extra statement?
+To: nocol-users@navya.com
+Date: Fri, 4 Jan 2002 11:59:30 -0500 (EST)
+X-Mailer: ELM [version 2.5 PL6]
+MIME-Version: 1.0
+Content-Type: text/plain; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+Sender: owner-snips-users@navya.com
+Precedence: normal
+X-Mozilla-Status: 8001
+X-Mozilla-Status2: 00000000
+X-UIDL: RH!"!WOH"!DOZ!!e-Y!!
+Status: RO
+Content-Length: 677
+Lines: 25
+
+Hi,
+
+	Every time a machine goes over, we get :
+
+WARNINGS
+========
+CHECK ERROR FILE /usr/local/etc/snips/run/etherload.error (new errors)
+
+
+	Which is :
+
+etherload: This is a SNIPS version
+etherload- Reading global config file /usr/local/etc/snips/etc/snips.conf
+(etherload).. locked pid-file, started new process (pid=12167)
+Scan-interval= 15, sleeptime= 300
+
+etherload: Thu Jan  3 16:50:47 2002 Bad bandwidth 117 >100
+etherload: Thu Jan  3 16:56:03 2002 Bad bandwidth 115 >100
+etherload: Thu Jan  3 17:06:42 2002 Bad bandwidth 114 >100
+
+
+Does it NEED to print this.... I would think thats what snipslogd is
+for..
+
+		Tuc/TTSG Internet Services, Inc.
+
+
+From - Tue Dec 25 02:20:12 2001
+Received: (avikas@localhost) by server1.navya.com (8.11.6) id fBM27FC58913 for snips-users-outlist; Fri, 21 Dec 2001 21:07:15 -0500 (EST)
+Received: from fubar.loosenut.com (cpe-66-87-89-249.ca.sprintbbd.net [66.87.89.249]) by server1.navya.com (8.11.6) id fBM27Et58905 for <snips-users@navya.com>; Fri, 21 Dec 2001 21:07:14 -0500 (EST)
+Received: (from russell@localhost)
+	by fubar.loosenut.com (8.9.3/8.9.3) id RAA08016
+	for snips-users@navya.com; Fri, 21 Dec 2001 17:56:40 -0800 (PST)
+Date: Fri, 21 Dec 2001 17:56:40 -0800
+From: Russell Van Tassell <russell@loosenut.com>
+To: snips-users@navya.com
+Subject: [snips-users] odd hostmon-collector error
+Message-ID: <20011221175640.A7879@loosenut.com>
+Mime-Version: 1.0
+Content-Type: text/plain; charset=us-ascii
+X-Mailer: Mutt 0.95.6i
+X-Notice-1: Unsolicited Commercial Email (Aka SPAM) to ANY systems under
+X-Notice-2: our control constitutes a $US500 Administrative Fee, payable
+X-Notice-3: immediately.  By sending us mail, you hereby acknowledge that
+X-Notice-4: policy and agree to the fee.
+Sender: owner-snips-users@navya.com
+Precedence: normal
+X-Keywords:                 
+X-UID: 87
+X-Mozilla-Status: 8001
+X-Mozilla-Status2: 00000000
+X-UIDL: Tib!![\#"!`3j!!+-(!!
+Status: RO
+Content-Length: 742
+Lines: 23
+
+
+For some reason, I've recently started getting these errors, over and
+over and over again in my ~snips/run/hostmon-collector.error file.  I
+can't see how this is getting a "null" host, however, looking at the
+code (and, to the best of my knowledge/recollection, nothing's changed
+in the config file recently, though I did move the machine(s) to a new
+subnet a few weeks back)
+
+-- begin
+forked 1 processes
+hostmon-collector (child 1 of 279): Unknown host 
+  [...]
+hostmon-collector (child 1 of 279): Unknown host 
+-- end
+
+
+-- 
+Russell M. Van Tassell
+russell@loosenut.com
+
+"The man who does not read good books has no advantage over the man who
+ cannot read them."                                         - Mark Twain
+
+
+From vikas  Tue Jan 15 12:53:10 2002
+Received: from heimdall.ttsg.com (wallstreet34.kickstartusa.com [65.105.161.248]) by server1.navya.com (8.11.6) id g0FHrAK16523 for <nocol-users@navya.com>; Tue, 15 Jan 2002 12:53:10 -0500 (EST)
+Received: (from tuc@localhost)
+	by heimdall.ttsg.com (8.9.3/8.9.3) id MAA02513
+	for nocol-users@navya.com; Tue, 15 Jan 2002 12:52:57 -0500 (EST)
+From: Tuc <tuc@ttsg.com>
+Message-Id: <200201151752.MAA02513@heimdall.ttsg.com>
+Subject: Dozens of DataAge problems
+To: nocol-users@navya.com
+Date: Tue, 15 Jan 2002 12:52:57 -0500 (EST)
+X-Mailer: ELM [version 2.5 PL6]
+MIME-Version: 1.0
+Content-Type: text/plain; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+Status: RO
+Content-Length: 1012
+Lines: 20
+
+Hi,
+
+	We just brought our system up, and are seeing alot of :
+
+ Warning - Tue Jan 15 12:40:10 2002 [hostmon]: DEVICE l.ttsg.com l.ttsg.com VAR DataAge 366 900 Secs LEVEL Warning LOGLEVEL Warning STATE down
+===
+ Warning - Tue Jan 15 12:40:10 2002 [hostmon]: DEVICE l2.ttsg.com l2.ttsg.com VAR DataAge 395 900 Secs LEVEL Warning LOGLEVEL Warning STATE down
+===
+ Warning - Tue Jan 15 12:40:10 2002 [hostmon]: DEVICE m.ttsg.com m.ttsg.com VAR DataAge 395 900 Secs LEVEL Warning LOGLEVEL Warning STATE down
+===
+ Warning - Tue Jan 15 12:40:10 2002 [hostmon]: DEVICE t.ttsg.com t.ttsg.com VAR DataAge 405 900 Secs LEVEL Warning LOGLEVEL Warning STATE down
+===
+ Warning - Tue Jan 15 12:40:10 2002 [hostmon]: DEVICE d.ttsg.com d.ttsg.com VAR DataAge 407 900 Secs LEVEL Warning LOGLEVEL Warning STATE down
+
+	I saw something in the archives about it, but no resolution. What
+is this trying to tell me, and how do I stop it? Its happening QUITE 
+frequently.
+
+		Thanks, Tuc/TTSG Internet Services, Inc.
+
+
+From vikas  Tue Jan 15 14:13:15 2002
+Received: from heimdall.ttsg.com (wallstreet34.kickstartusa.com [65.105.161.248]) by server1.navya.com (8.11.6) id g0FJDFJ21029 for <nocol-users@navya.com>; Tue, 15 Jan 2002 14:13:15 -0500 (EST)
+Received: (from tuc@localhost)
+	by heimdall.ttsg.com (8.9.3/8.9.3) id OAA03479
+	for nocol-users@navya.com; Tue, 15 Jan 2002 14:13:15 -0500 (EST)
+From: Tuc <tuc@ttsg.com>
+Message-Id: <200201151913.OAA03479@heimdall.ttsg.com>
+Subject: snipslogd not getting/passing info?
+To: nocol-users@navya.com
+Date: Tue, 15 Jan 2002 14:13:15 -0500 (EST)
+X-Mailer: ELM [version 2.5 PL6]
+MIME-Version: 1.0
+Content-Type: text/plain; charset=us-ascii
+Content-Transfer-Encoding: 7bit
+Status: RO
+Content-Length: 405
+Lines: 12
+
+Hi,
+
+Hostmon is saying there are disks that are over the limit, but
+when snipslogd passes it to my scripts, all I see is :
+
+Tue Jan 15 13:45:13 2002 [hostmon]: DEVICE +o.ttsg.com o.ttsg.com VAR DFspace_%used 88 95 %full LEVEL Warning LOGLEVEL Warning STATE down
+
+
+But in genweb, it sees it properly...
+
+Whats up? Scanned the archives quickly, no answers...
+
+		Tuc/TTSG Internet Services, Inc.

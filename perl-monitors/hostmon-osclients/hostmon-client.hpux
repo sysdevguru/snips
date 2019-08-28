@@ -1,0 +1,240 @@
+#!/usr/local/bin/perl
+
+#           ########  hostmon-client.hpux  #######
+#
+# HP-UX A.09.05
+#
+## $Header: /home/cvsroot/snips/perl-monitors/hostmon-osclients/hostmon-client.hpux,v 1.0 2001/07/09 04:40:14 vikas Exp $
+#
+# This file is appended by 'hostmon-client'
+#
+
+###
+# All the following functions must print out the following:
+#   		VARIABLE VALUE UNITS COMMENT
+# For variables that are part of a varying maximum, normalize it and give
+# the percentage instead (e.g. free memory, etc.)
+###
+###
+use strict;
+use vars qw($debug $onfscalls $onfsretries $otimeo);
+
+### csh% uptime
+###  4:22pm  up 91 days, 7 mins,  3 users,  load average: 0.12, 0.14, 0.10
+###
+sub uptime {
+  my $cmd = "uptime";
+  my $value = -1 ;
+  my $uptime = 0;    
+  open (CMD, "$cmd |");
+  while (<CMD>) {
+    $debug &&  print STDERR "(debug)uptime: $_" ;
+    chomp;
+    if ( /^.*up\s+(\d+)\s+day.*,\s*(\d+)\s*mins,.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ )
+    {
+      $uptime = ($1 * 1440) + $2;
+      printf "Uptime %d mins\n", $uptime;
+      printf "Load5 %d load-5min\n", int($4) ;
+      last ;
+    }elsif ( /^.*up\s+(\d+)\s+day.*,\s*(\d+):(\d+),.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ ) {
+      $uptime = ($1 * 1440) + ($2 * 60) + $3;
+      printf "Uptime %d mins\n", $uptime;
+      printf "Load5 %d load-5min\n", int($5) ;
+      last ;
+    }
+    elsif ( /^.*up\s+(\d+):(\d+),.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ ) {
+      $uptime = ($1 * 60) + $2;
+      printf "Uptime %d mins\n", $uptime;
+      printf "Load5 %d load-5min\n", int($4) ;
+      last ;
+    }
+    elsif ( /^.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ ) {
+      printf "Load5 %d load-5min\n", int($2) ;
+      last ;
+    }
+    else { print STDERR "(debug)uptime() : command format not understood.\n"; }
+  }	
+  close (CMD);
+  
+  #    print "Load 9999 load UnParseableInput\n";
+}
+
+### 
+# pstat NOT SUPPORTED ON HPUX
+#
+sub pstat {
+  return;
+}  # end &pstat()
+
+### nfsstat
+#
+# hpux> nfsstat
+#
+# Client rpc:
+# calls      badcalls   retrans    badxid     timeout    wait       newcred
+# 322437     308        553        2          722        0          0          
+#
+sub nfsstat {
+  my $cmd = "nfsstat";
+  my ($dcalls, $dtimeo, $dretries, $tvalue, $rvalue);
+  open (CMD, "$cmd |");
+  while (<CMD>) {
+    chomp;
+				# rate =  timeout/calls
+    next until (/Client rpc:/) ;
+    # next;  # ignore the header
+    if ( /^\s*(\d+)\s+\d+\s+(\d+)\s+\d+\s+(\d+)\s+\d+\s+\d+\s*$/ )  {
+      $debug && print STDERR "(debug)nfsstat: $_\n" ;
+      
+      $dcalls = $1 - $onfscalls ; $onfscalls = $1 ;
+      $dretries = $2 - $onfsretries; $onfsretries = $2;
+      $dtimeo = $3 - $otimeo ; $otimeo = $31 ;
+      last ;			# no more lines
+    }
+  }				# end (while)
+  close (CMD);
+  
+  if ($dcalls == 0) { $tvalue = 0 ; $rvalue = 0;}
+  else {
+    $tvalue = int($dtimeo * 100 / $dcalls); # calc timeout rate
+    $rvalue = int($dretries * 100 / $dcalls); # calc retry rate
+  }
+  
+  if ($debug) { print STDERR "(debug)nfsstat: $dtimeo/$dcalls\n" ;}
+  print "NFStimeouts $tvalue %timeouts\n";
+  print "NFSretries $rvalue %retries\n";
+  
+}				# end &nfsstat()
+
+## df
+# Extract space availability stats. Printing out available MBytes and
+# percent full (together they make sense).
+# Note that this command prints out a number of lines with same variable
+# name (one for each disk). The hostmon server picks out the worst of
+# these lines.
+#
+# hpux> bdf
+# Filesystem           kbytes    used   avail capacity Mounted on
+# /dev/dsk/c201d6s0   1930812 1003138  734592    58%   /
+# nfshost:/home       3664330 1392919 1904981    42%   /home
+#
+sub df {
+  
+  open (CMD, "bdf |");
+  while (<CMD>) {
+    chomp;
+    if (/^\s*Filesystem/)  { next; } # ignore header line
+    if (/^\s*\S+:\/\S*/)   { next; } # ignore NFS mounts
+    $debug && print STDERR "(debug)df: $_\n" ;
+    
+    if (/^.*\s+(\d+)\s+(\d+)%\s+(\/\S*)\s*$/)
+    {
+      printf "DFspace_avail %d MB $3\n", int($1/1000);
+      print "DFspace_\%used $2 \%full $3\n";
+    }
+  }
+  close (CMD);
+  return ;
+  
+}	# end &df()
+
+##
+# hpux>iostat
+# /dev/*dsk/c2016d*s* 
+# bps  sps  msps  
+#   0  0.0   0.0  
+# Dont know how to tackle this one...
+##
+sub iostat {
+  return;
+}	# end &iostat()
+
+
+##        vmstat
+# Extract paging, real-memory, cache hits, CPU load, Context switches.
+# Note: Seems like the fields are fixed length, and sometimes there are
+#       no spaces between the output fields.
+# hpux$ vmstat -w 5 -c 2
+#    procs   memory          page                         faults      cpu
+#    r b w   avm   free      re  at  pi  po  fr  de sr    in   sy  cs us sy id
+#    0 0 7   1397  828       0   0   0   0   0   0  0     48   31  7  0  0  100
+##    -1-      2     3       4   5   6   7   8   9  10    11   12  13 14 15 16
+#
+## 
+sub vmstat {
+  my $i = 0;
+  my $dline;
+  my $cmd = "vmstat";
+  
+  open(CMD, "$cmd |");
+  
+  while (<CMD>) { $dline = $_; next; }
+  
+  # Here we have the last data line from the command above.
+  if ($debug)  { print STDERR "(debug)vmstat: $dline"; }
+  $_ = $dline ;
+  chomp;
+  
+  # if any CPU time is 100, vmstat doesnt have any spaces in it.
+  s/100(\s+\d+){0,2}\s*$/ 100$1/;
+  
+  # I have also found vmstat to mess up the 'cs' field (no space if
+  # it or the sorrounding fields are too long). Hence taking only
+  # 3 digits of the context switches.
+  ###  procs  #  avm  #  free  #  si   #  so   #   pi  #  po   #      #    cs     #  us   #  sy   #  id   ######
+  if (/^(\s+\d+){3}\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)*$/)
+  {
+    printf "MemFree %d MB\n", int($3 / 1000); # convert KB to MB
+    print "PageRe $4 pages/sec\n";
+    print "PageIn $6 pi\n";
+    print "PageOut $7 po\n";
+    print "CtxtSw $13 rate\n";
+    print "CPUus $14 %user\n";
+    print "CPUsy $15 %system\n";
+    print "CPUidle $16 %idle\n";
+  }
+  close (CMD);
+
+}				# end &vmstat()
+
+
+##       netstat
+# Extract collision and error rates.
+# See comments in hostmon-client.sunos
+#
+#  irix> netstat 5
+#       input   (le0)     output           input  (Total)    output       
+#  packets errs  packets errs  colls  packets errs  packets errs  colls  
+#   <first line with total values, ignore>
+#  1467    0     64      0     0      1467    0     64      0     0     
+#  1584    0     96      0     1      1584    0     96      0     1     
+#
+#
+# 
+sub netstat {
+  my $i = 0;
+  my $cmd = "netstat";
+  
+  my $pid = open (CMD, "$cmd 10 |"); # 10 second sampling
+  while (<CMD>) {
+    if (/^\s+[A-z]+/) { next; }	# ignore header lines if any
+    if (++$i < 3)  { next ;}	# ignore first 3 lines
+    chomp;
+    $debug && print STDERR "(debug)netstat: $_\n" ;
+    
+    if (/^\s*\d+(\s+\d+)*\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$/)
+    {
+      my ($ipkts, $opkts) = ($2, $4);
+      
+      if ($ipkts == 0) { $ipkts = 1; } # avoid division by zero
+      if ($opkts == 0) { $opkts = 1; }
+      printf "NetIErr %d PktRate\n", int ($3 * 100 / $ipkts);
+      printf "NetOErr %d PktRate\n", int ($5 * 100 / $opkts);
+      printf "NetColl %d PktRate\n", int ($6 * 100 / $opkts);
+    }
+    kill ('TERM', $pid) ; last ; # no more lines
+  }	
+  close (CMD);
+}	# end &netstat()
+
+1;

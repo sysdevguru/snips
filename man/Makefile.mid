@@ -1,0 +1,50 @@
+# $Header: /home/cvsroot/snips/man/Makefile.mid,v 1.0 2001/07/08 22:31:09 vikas Exp $
+#
+# Make for installing the man pages
+# This installs all the man pages with the same extension
+
+MANPAGES1 = snipstv.1
+MANPAGES3 = snips-perl.3
+MANPAGES8 = 	etherload.8 multiping.8 nsmon.8 ntpmon.8 \
+		pingmon.8 portmon.8 radiusmon.8 \
+		snips-utility.8 snips.8 snipslogd.8 \
+		tpmon.8 trapmon.8
+
+TAIL =	prologue.man
+
+all:
+	@echo	"Building all in 'man'"
+	@for m in $(MANPAGES1) $(MANPAGES3) $(MANPAGES8); do \
+	  cat $$m $(TAIL) | sed \
+		-e "s#@ROOTDIR@#$(ROOTDIR)#g" \
+		-e "s#@PIDDIR@#$(PIDDIR)#g" \
+		-e "s#@ETCDIR@#$(PIDDIR)#g" \
+		-e "s#@OPSMAIL@#$(OPSMAIL)#g" \
+		-e "s#@ADMINMAIL@#$(ADMINMAIL)#g" \
+		> $$m.sed ;\
+	done
+
+install:  installdir
+	@echo "Installing in 'man'"
+	@- [ -d $(MANDIR) ] || mkdir $(MANDIR) && chown iris:wheel $(MANDIR)
+#	@-for d in $(MANDIR)/man1 $(MANDIR)/man3 $(MANDIR)/man8; do \
+#		[! -d $$d ]  && mkdir $$d ;\
+#	 done
+	@- for m in $(MANPAGES1); do \
+	 	$(INSTALL) $(INSTALLFLAGS) -c -m 644 $$m.sed $(MANDIR)/`basename $$m 1`$(MANEXT) ;\
+	 done
+	@- for m in $(MANPAGES3); do \
+	 	$(INSTALL) $(INSTALLFLAGS) -c -m 644 $$m.sed $(MANDIR)/`basename $$m 3`$(MANEXT) ;\
+	 done
+	@- for m in $(MANPAGES8); do \
+	 	$(INSTALL) $(INSTALLFLAGS) -c -m 644 $$m.sed $(MANDIR)/`basename $$m 8`$(MANEXT) ;\
+	 done
+
+clean:
+	rm -f *.sed
+
+rcs:
+	@echo "Extracting RCS revisions in 'doc'"
+	@-for i in $(MANPAGES1) $(MANPAGES3) $(MANPAGES8); do \
+		$(CO) -q $$i ; \
+	 done

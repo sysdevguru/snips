@@ -1,0 +1,310 @@
+#!/usr/local/bin/perl -w
+
+#           ########  hostmon-client.linux #######
+#
+#
+## $Header: /home/cvsroot/snips/perl-monitors/hostmon-osclients/hostmon-client.linux,v 1.2 2008/05/08 14:29:18 tvroon Exp $
+#
+# This file is appended by 'hostmon-client'
+#
+###
+# All the following functions must print out the following:
+#   		VARIABLE VALUE UNITS COMMENT
+# For variables that are part of a varying maximum, normalize it and give
+# the percentage instead (e.g. free memory, etc.)
+#
+# <robl@linx.net> - defaults to "ext3" fs type as this is more likely than
+#                   ext2 these days.
+###
+###
+
+use strict;
+use vars qw ($debug);
+
+### csh% uptime
+###  12:09pm  up 16 days, 19:58,  5 users,  load average: 0.32, 0.21, 0.01
+###
+sub uptime {
+  my $cmd = "uptime";
+  my $value = -1 ;
+  my $uptime = 0;    
+  open (CMD, "$cmd |");
+  while (<CMD>) {
+    $debug &&  print STDERR "(debug)uptime: $_" ;
+    chomp;
+    
+    if ( /^.*up\s+(\d+)\s+day.*,\s*(\d+):(\d+),.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ ) {
+      $uptime = ($1 * 1440) + ($2 * 60) + $3;
+      printf "Uptime %d mins\n", $uptime;
+      printf "Load5 %d load-5min\n", int($5) ;
+      last ;
+    }
+    elsif ( /^.*up\s+(\d+):(\d+),.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ ) {
+      $uptime = ($1 * 60) + $2;
+      printf "Uptime %d mins\n", $uptime;
+      printf "Load5 %d load-5min\n", int($4) ;
+      last ;
+    }
+    elsif ( /^.*load\s*average\S*:\s+(\S+),\s+(\S+),\s+(\S+).*$/ ) {
+      printf "Load5 %d load-5min\n", int($2) ;
+      last ;
+    }
+    else { print STDERR "(debug)uptime() : command format unknown\n"; }
+  }	
+  close (CMD);
+  
+  #    print "Load 9999 load UnParseableInput\n";
+}
+
+##
+# LINUX DOES NOT SUPPORT PSTAT. This code to extract the stats from
+# /proc was provided by John Henders <jhenders@bogon.com>
+##
+sub pstat {
+  if (-f "/proc/sys/kernel/file-nr") {	# older than 2.2.14
+    my $filenr = `cat /proc/sys/kernel/file-nr`;
+    my $filemax = `cat /proc/sys/kernel/file-max`;       
+    printf "FileTable %d %%used\n", int($filenr * 100 / $filemax);
+  }
+  elsif (-f "/proc/sys/fs/file-nr") {	# newer kernels
+    my ($filealloc, $filenr, $filemax) = 
+      split (/\s+/,`cat /proc/sys/fs/file-nr`);
+    printf "FileTable %d %%used\n", int($filenr * 100 / $filemax);
+  }
+
+  my $meminfo = `cat /proc/meminfo`;                               
+  $meminfo =~ /SwapFree:\s+(\d+)/;
+  printf("SwapSpace %d MBytes\n", int($1/1024) );
+
+}  # end &pstat()
+
+### nfsstat
+# NOT SUPPORTED ON LINUX
+#
+sub nfsstat {
+    return;
+}	# end &nfsstat()
+
+## df
+# Extract space availability stats. Printing out available MBytes and
+# percent full (together they make sense).
+# Note that this command prints out a number of lines with same variable
+# name (one for each disk). The hostmon server picks out the worst of
+# these lines.
+#
+# linux-vikas> df -k -t ext3
+# Filesystem         1024-blocks  Used Available Capacity Mounted on
+# /dev/hda5              19329   14135     4163     77%   /
+# /dev/hda2             198123  111709    76183     59%   /usr
+# /dev/hda7              19329     119    18179      1%   /spare
+# /dev/hda3              99061   85546     8400     91%   /usr/local
+#
+# linux-vikas> df -i -t ext3
+# Filesystem           Inodes   IUsed   IFree  %IUsed Mounted on
+# /dev/hda5              10320    1589    8731    15%  /
+# /dev/hda2              51200   12254   38946    24%  /usr
+# /dev/hda7              10320      24   10296     0%  /spare
+# /dev/hda3              25584    3509   22075    14%  /usr/local
+#
+sub df {
+
+  open(CMD, "df -k -t ext3 |");
+  while(<CMD>){
+    chomp;
+    if (/^\s*Filesystem/) { next; } #ignore header line
+    if (/^\s*\S+:\/\S*/)  { next; } # ignore NFS mounts
+    
+    $debug && print STDERR "(debug)df: $_\n";
+    
+    if(/^.*\s+(\d+)\s+(\d+)%\s+(\/\S*)\s*$/)
+    {
+      printf "DFspace_avail %d MB $3\n", int($1/1024);
+      printf "DFspace_%%used $2 %%full $3\n";
+    }       
+  }
+  close (CMD);
+  open (CMD, "df -i -t ext3 |");
+  while (<CMD>) {
+    chomp;
+    if (/^\s*Filesystem/)  { next; } # ignore header line
+    
+    $debug && print STDERR "(debug)df: $_\n" ;
+    
+    if (/^.*\s+(\d+)\s+(\d+)%\s+(\/\S*)\s*$/)
+    {
+      printf "DFinodes_avail $1 inodes $3\n";
+      printf "DFinodes_%%used $2 %%inodes $3\n";
+    }
+  }
+  close (CMD);
+}	# end &df()
+
+##
+# LINUX DOES NOT SUPPORT IOSTAT
+##
+sub iostat {
+  return;
+}	# end &iostat()
+
+
+##        vmstat
+# Extract paging, real-memory, cache hits, CPU load, Context switches.
+# Note: Seems like the fields are fixed length, and sometimes there are
+#       no spaces between the output fields.
+# lenny> vmstat 5 2 (linux v2)
+#
+# procs                  memory    swap        io    system         cpu
+# r b w  swpd  free  buff cache  si  so   bi   bo   in   cs  us  sy  id
+# 0 0 0   540  3200  2084 19556   0   0    3    2  141   79   2   1  97
+# 0 0 0   540  3200  2084 19556   0   0    0    0  127   66   0   0  99
+#
+# Some machines seem to  have no 'cache' field.
+# procs            memory    swap        io    system         cpu
+# r b w  swpd  free  buff  si  so   bi   bo   in   cs  us  sy  id
+# 0 0 0  4492   268  2792   0   0    1    0  152   57   6   1  92
+# 0 0 0  4492   268  2792   0   0    0    0  106    7   1   1  98
+#
+# On a Linux v1 kernel:
+# sparky $ vmstat
+# load free cache swap pgin pgou dk0 dk1 dk2 dk3 ipkt opkt int  ctx usr sys idl
+# 0.00 11.4   9.3 18.0    4    0   0   1   0   0    1    1 -100  14  0   2  98
+# 0.00 11.4   9.3 18.0    0    0   0   0   0   0    0    0 -100  10  0   0 100
+
+## 
+sub vmstat {
+  my $i = 0;
+  my $dline;
+  my $cmd = "vmstat";
+  my $hascache_field = 0;
+  
+  open (CMD, "$cmd 5 2 |");
+  
+  while (<CMD>) { /cache/ && ++$hascache_field; $dline = $_; next; }
+  
+  # Here we have the last data line from the command above.
+  if ($debug)  { print STDERR "(debug)vmstat: $dline"; }
+  $_ = $dline ;
+  chomp;
+  
+  # if any CPU time is 100, vmstat doesnt have any spaces in it. Insert space
+  s/100(\s+\d+){0,2}\s*$/ 100$1/;
+  
+  ## On a Linux 2.x machine
+  ###      1procs   # 2swpd # 3fre  # 4buff # 5cache#  6si  #  7so  #  8bi #    9bo  #  in #  10cs #  11us #  12sy #  13id #
+  if ($hascache_field) {
+    if (/^(\s+\d+){3}\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)+\s+(\d+)\s+\d+\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$/)
+    {
+      printf "MemFree %d MB\n", int(($3 + $4 + $5)/1024); # KB to MB
+      printf "SwapIn $6 si\n";  # actually in Kb/sec
+      printf "SwapOut $7 so\n"; #
+      printf "CtxtSw $10 rate\n";
+      printf "CPUus $11 %%user\n";
+      printf "CPUsy $12 %%system\n";
+      printf "CPUidle $13 %%idle\n";
+    }
+  }
+  elsif (/^(\s+\d+){2}\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)+\s+(\d+)\s+\d+\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$/)
+  {
+    # printf "MemFree %d MB\n", int(($4 + $5)/1024); # KB to MB
+    printf "SwapIn $6 si\n";	# actually in Kb/sec
+    printf "SwapOut $7 so\n";	#
+    printf "CtxtSw $10 rate\n";
+    printf "CPUus $11 %%user\n";
+    printf "CPUsy $12 %%system\n";
+    printf "CPUidle $13 %%idle\n";
+  }
+  
+  close (CMD);
+  
+  
+  # to extract the pagein and pageout info
+  my $sleepsecs = 5;
+  my ($opi, $opo, $pi, $po) = (0,0,0,0);
+  open(CMD, "cat /proc/stat |");
+  while (<CMD>) {
+    next unless /^page\s*(\d+)\s*(\d+)/;
+    ($opi, $opo) = ($1, $2);
+    close (CMD);
+    last;
+  }
+  sleep($sleepsecs);
+  open(CMD, "cat /proc/stat |");
+  while (<CMD>) {
+    next unless /^page\s*(\d+)\s*(\d+)/;
+    ($pi, $po) = ($1, $2);
+    close(CMD);
+    last;
+  }
+  $pi -= $opi; $pi = int(($pi / $sleepsecs) + 0.5);
+  $po -= $opo; $po = int(($po / $sleepsecs) + 0.5);
+  print "PageIn $pi pi\n";
+  print "PageOut $po po\n";
+
+}				# end &vmstat()
+
+
+##       netstat
+# Extract collision and error rates. Under Linux we cannot
+# print delta values.  It always gives total packets.
+#
+# We will get the header and then get next two lines of total
+# and calculate the delta from it. Since it runs continously
+# we will close the input stream forceably after getting two
+# input samples.
+#
+#
+# linux-vikas>netstat -i -c
+#
+# Kernel Interface table
+# Iface   MTU Met  RX-OK RX-ERR RX-DRP RX-OVR  TX-OK TX-ERR TX-DRP TX-OVR Flags
+# lo     2000   0      0      0      0      0  26335      0      0      0 BLRU
+# eth0   1500   0 459402      0      0      0 689945      0      0      0 BRU
+# Kernel Interface table
+# Iface   MTU Met  RX-OK RX-ERR RX-DRP RX-OVR  TX-OK TX-ERR TX-DRP TX-OVR Flags
+# lo     2000   0      0      0      0      0  26340      0      0      0 BLRU
+# eth0   1500   0 459404      0      0      0 689947      0      0      0 BRU
+# 
+sub netstat {
+  my $i = -1;
+  my $cmd = "netstat -i -c";
+
+  my (@ip, @op, @iep, @oep) = (0, 0, 0, 0);
+  my $pid = open (CMD, "$cmd |");
+  while (<CMD>) {
+    chomp;
+    $debug && print STDERR "(debug)netstat: $_" ;
+    # we take the 1st and 5th samples.
+    if (/^Iface/) { ++$i; next; }
+    next if ($i == 1 || $i == 2 || $i == 3);	# skip intermediate samples
+    if ($i == 5)		# got samples, print result and quit
+    {
+      my $ipkts = $ip[4] - $ip[0];
+      my $opkts = $op[4] - $op[0];
+      my $iepkts = $iep[4] - $iep[0];
+      my $oepkts = $oep[4] - $oep[0];
+      kill ('TERM', $pid); 
+      # now print accumulated packet info
+      if ($ipkts == 0) { $ipkts = 1;} # avoid division by zero
+      if ($opkts == 0) { $opkts = 1;}
+      printf "NetIErr %d PktRate\n", int ($iepkts * 100 / $ipkts);
+      printf "NetOErr %d PktRate\n", int ($oepkts * 100 / $opkts);
+      last; 
+    }
+    
+    if (/^\s*\S+(\s+\d+)*\s+(\d+)\s+(\d+)\s+\d+\s+\d+\s+(\d+)\s+(\d+)\s+\d+\s+\d+\s+\S+\s*$/)
+    {
+      $ip[$i] += $2;		# add packets for all interfaces
+      $op[$i] += $4;
+      $iep[$i] += $3;
+      $oep[$i] += $5;
+      next;			# get next interface
+    }
+  }	
+  close (CMD);
+}	# end &netstat()
+ 
+
+# return 1 since this is included by another file
+1;
+
+###############      END OF hostmon-client.linux      ####################

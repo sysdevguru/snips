@@ -1,0 +1,46 @@
+### $Id: TODO,v 1.0 2001/09/22 15:29:18 vikas Exp $
+
+TODO
+====
+
+event id
+  Update logstats to handle 'event id'
+  enable generation of event id in update_event
+
+rrd
+  start storing perf data in rrd from each monitor separate from state
+  How does rrd handle the subdevice name in 'site.name' field?
+  Consistent use of addr/name
+  rrdtool to use NAMES, not addresses. What about subdevice prefix?
+  still getting errors about multiple updates
+  expire header for all images
+
+snipslog
+  forward events to remote host
+
+event corelation
+  supress event display based on parent or variable
+  Q. should monitors write database or should snipslogd?
+  Q. put all events in database or only if down?
+
+snipstv
+  highlight new events that just went down
+
+reports
+  create in directory and access via snipsweb
+
+syslogmon
+   How to handle RRD in syslogmon
+
+Novellmon
+   Change so that hostname = any name, address =server name,
+   varname = service number, varunits = IPX_entry or Entry
+   OR
+   hostname = service# + serverName,   address = serverName
+   var = IPX_service  Units = Entry
+
+tkSnips
+   subdevice and new time format
+
+trapmon
+   Enterprise specific trapmon.

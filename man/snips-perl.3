@@ -1,0 +1,47 @@
+.\" $Header: /home/cvsroot/snips/man/snips-perl.3,v 1.0 2001/07/15 03:54:37 vikas Exp $
+.\"
+.TH SNIPSPERL 3 "June 2001"
+.SH NAME
+SNIPS.pm \- PERL API to SNIPS
+.SH SYNOPSIS
+.I use SNIPS;
+.SH DESCRIPTION
+.LP
+.B SNIPS.pm
+is a perl interface to SNIPS which can be used to write monitors for SNIPS in 
+the
+.I perl
+programming language.
+.LP
+A number of monitors are provided with the distribution (monitors for Unix
+host performance, syslog, SNMP variables, SQL databases, appletalk, novell
+routes, etc.).
+.LP
+The Perl API to SNIPS is described in detail in 
+.I SNIPS.pm.
+Use
+.I pod2text SNIPS.pm
+to generate this documentation.
+.LP
+This library uses the perl XS interface to link directly with the SNIPS C
+library (libsnips.a) for high performance and consistency.
+.PP
+The PERL package is available from
+.I www.perl.org
+if not with your operating system by this time and age.
+.\"
+.SH CAVEATS
+.TP 1)
+The \fIrcisco\fR program is used by several monitors to log into cisco
+routers and issue commands on the router. The password can be passed on the
+command line, but a 'ps' command will display this password on the command
+being run. You can put the password in the file itself, and set the mode to
+be 700 (owned by the snips user) so that other users cannot read this file
+and view the password. Then do not put any password in the various config
+files.
+.SH AUTHOR
+Originally written in 1993 by Jim Wobus, Syracuse University
+(jmwobus@mailbox.syr.edu) entirely in perl for NOCOL.
+Rewritten in C using perl XS and XSUBS by Vikas Aggarwal (vikas@navya.com)
+for SNIPS.
+

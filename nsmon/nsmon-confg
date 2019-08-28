@@ -1,0 +1,44 @@
+# $Id: nsmon-confg,v 1.0 2001/07/08 22:38:19 vikas Exp $
+#
+# Config file for 'nsmon'. Set the list of servers that are to be
+# monitored for their nameserver process over here.
+#
+# The query type is SOA
+#
+#	POLLINTERVAL	<secs>
+#	DOMAINNAME	<string>
+#	hostname1	ipaddress	[AUTH]
+#	hostname2	ipaddress	[AUTH]
+#	DOMAINNAME	<string>
+#	...
+#
+# Append the word 'AUTH' after the ipaddress if an authorative answer is
+# required. By default AA is false.
+#
+##
+# The 'hostname' is for display purposes only, so you should set it
+# to a value which includes the domain name being queried.
+#
+POLLINTERVAL	600
+
+# To enable RRDtool data collection
+RRDTOOL  ON
+
+# snips name	ipaddress	[AUTH]
+# -----------   ---------       ------
+
+## Query the following nameservers for the domain 'navya.com'
+DOMAINNAME	navya.com
+ns1-NAVYA.COM	128.1.2.3
+r2d2-NAVYA.COM	128.121.50.2	AUTH
+dumbo-NAVYA.COM	128.121.50.147
+
+## Query the following nameservers for the domain 'abc.com'
+DOMAINNAME	abc.com
+NS1-ABC.COM	128.121.50.7
+NS2-ABC.COM	dns1.abc.edu
+
+##
+DOMAINNAME	netplex-tech.com
+solar-NETPLEX	198.138.178.11	
+

@@ -1,0 +1,35 @@
+# $Id: Makefile.mid,v 1.0 2001/07/09 03:48:45 vikas Exp $
+#
+# Makefile for 'ndaemon'
+#
+
+# Might need to link with 'libresolv' on some systems
+
+PROGCDEFS =	-DDATADIR=\"$(DATADIR)\"
+PROGLIBS  =	# -lresolv
+
+TARG =	ndaemon tkSnips
+OBJS =	ndaemon.o
+INITFILES = ndaemon
+
+all:	$(TARG)
+
+ndaemon: $(OBJS) Makefile
+	$(CC) $(CFLAGS) $(OBJS) $(LIBS) $(PROGLIBS) -o $@
+
+tkSnips:  tkSnips.tix
+	@echo "Doing substitutions on tkSnips" ;\
+	 rm -f tkSnips ; \
+	 cat tkSnips.tix > tkSnips ;
+
+install: installdir $(TARG)
+	$(INSTALL) $(INSTALLFLAGS) -c -m 751 $(TARG) $(BINDIR)/
+
+clean:
+	rm -f $(DIRT) test
+
+rcs:
+	@echo "Doing 'rcs' in `pwd`"
+	@-for i in $(OBJS); do \
+		$(CO) -q `basename $$i .o`.c ;\
+	  done

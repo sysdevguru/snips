@@ -1,0 +1,205 @@
+#!/bin/sh
+#
+# $Header: /home/cvsroot/snips/utility/snipsprog.init,v 1.0 2001/07/09 04:12:47 vikas Exp $
+#
+## Generic SysV type init script for all snips programs. Extracts the
+#  process name from the name it is invoked with.
+#  (this script munged from the Linux init.d/ scripts)
+#
+#  SET THE ps COMMAND in the getpid() function based on your OS
+#
+## 
+
+PATH="/sbin:/usr/sbin:/bin:/usr/bin"
+export PATH
+
+ROOTDIR="@ROOTDIR@"
+PIDDIR="@PIDDIR@"
+PSFLAGS="@PSFLAGS@"         # ps ax  or ps -e
+
+BINDIR=$ROOTDIR/bin
+
+PROG=`basename $0 | sed -e 's/\.init$//' -e 's/\..*$//'`
+
+PIDFILE="${PIDDIR}/${PROG}.pid"
+ERRFILE="${PIDDIR}/${PROG}.error"
+
+###
+### FUNCTIONS
+###
+
+getpid() {
+    if [ $# = 0 ] ; then
+	echo "Usage: getpid {program}"
+	return 1
+    fi
+
+    # First try $PIDFILE
+    if [ -f "$PIDFILE" ] ; then
+	pid=`head -1 $PIDFILE`
+	if [ "$pid" != "" ] ; then
+	    echo $pid
+	    return 0
+	fi
+    fi
+
+    # Finally try to extract it from ps depending on the OS
+    case "`uname -s -r`" in
+	LINUX20|Linux\ 2*)
+	    ps auxw | awk 'BEGIN { prog=ARGV[1]; dir=ARGV[2]; ARGC=1 } 
+		       { if ((prog == $11) || (("(" prog ")") == $11) ||
+			    ((prog ":") == $11) || ((dir "/" prog) == $11))
+			    { print $2 } }' $1 $BINDIR
+	;;
+	SUNOS5|SunOS\ 5*)
+	    ps -e | egrep "[ /]$1" | grep -v grep | awk '{ print $1 }'
+	;;
+	*)
+	    ps ax | egrep " $BINDIR/$1" | grep -v grep | awk '{ print $1 }'
+	;;
+    esac
+
+}
+
+procstatus() {
+
+  case "`uname -s -r`" in
+    LINUX20|Linux\ 2*)
+	ps $1 2>&1 | egrep "^ *$1"
+	;;
+    SUNOS5|SunOS\ 5*)
+	ps -p $1 2>&1 | egrep "^ *$1"
+	;;
+    *)
+	ps ax 2>&1 | egrep "^ *$1"
+	;;
+  esac
+
+}
+
+###################################################################
+
+if [ ! -f $BINDIR/$PROG ]; then
+    echo "$BINDIR/$PROG missing"
+    exit 0
+fi
+
+RETVAL=0
+PID=`getpid $PROG`
+
+# if [ ! -z "$PID" ]; then echo "PID of $PROG is $PID" ; fi
+
+case "$1" in
+  start)
+	if [ ! -z "$PID" ] && [ "$PID" != "0" ]; then
+	    echo "$PROG already running, pid $PID"
+	    procstatus $PID
+	    exit 1
+	fi
+	echo "Starting $BINDIR/$PROG ..." | tr -d '\012'
+	echo "" >> $ERRFILE		# blank line separator
+	echo "Date `date`" >> $ERRFILE
+	if [ $PROG = "snipslogd" ]; then
+	    $BINDIR/$PROG -f $ROOTDIR/etc/$PROG-confg  >> $ERRFILE 2>&1 &
+       	    RETVAL=$?
+	else 
+	    $BINDIR/$PROG -a -f $ROOTDIR/etc/$PROG-confg  >> $ERRFILE 2>&1 &
+	    RETVAL=$?
+	fi
+	if [ $RETVAL != 0 ]; then
+	    echo "failed"
+	else
+	    echo "done"
+	fi
+	procstatus `getpid $PROG`
+	;;
+  stop)
+	# Stop process
+	if [ -z "$PID" ] || [ "$PID" = "0" ]; then
+	    echo "$PROG probably not running"
+	    exit 1
+	fi
+
+	echo "Shutting down $PROG ... " | tr -d '\012'
+	kill -TERM  $PID
+	sleep 1
+	kill -9 $PID >/dev/null 2>&1
+	procstatus $PID
+	echo ""
+	;;
+  restart)
+	$0 stop
+	sleep 1
+	$0 start
+	;;
+  hup|reload)
+	# Send HUP to process to re-read config file
+	if [ -z "$PID" ] || [ "$PID" = "0" ]; then
+	    echo "$PROG probably not running"
+	    exit 1
+	fi
+
+	echo "Sending HUP to $PROG, pid $PID... " | tr -d '\012'
+	kill -HUP $PID
+	sleep 1
+	PID=`getpid $PROG`
+ 	if [ ! -z "$PID" ] && [ "$PID" != "0" ]; then
+	    echo "done"
+	    RETVAL=0
+	else
+	    echo "process died?"
+	    RETVAL=1
+	fi
+	procstatus $PID
+	;;
+  debug)
+	# Send USR1 to process to toggle debug
+	if [ -z "$PID" ] || [ "$PID" = "0" ]; then
+	    echo "$PROG probably not running"
+	    exit 1
+	fi
+
+	echo "Sending USR1 to $PROG, pid $PID... " | tr -d '\012'
+	kill -USR1 $PID
+	sleep 1
+	PID=`getpid $PROG`
+ 	if [ ! -z "$PID" ] && [ "$PID" != "0" ]; then
+	    echo "done"
+	    RETVAL=0
+	else
+	    echo "process died?"
+	    RETVAL=1
+	fi
+	;;
+  status)
+ 	if [ ! -z "$PID" ] && [ "$PID" != "0" ]; then
+	    echo "$PROG is running, pid $PID"
+	    procstatus $PID
+	    RETVAL=0
+	else
+	    echo "$PROG not running"
+	    RETVAL=1
+	fi
+	if [ -s $ERRFILE ]; then
+	    echo "Process run file ($ERRFILE) is:"
+	    sleep 2
+	    more $ERRFILE
+	fi
+	;;
+  clean)
+	rm -f $PIDFILE $ERRFILE
+	if [ ! -f $PIDFILE ]; then
+	  if [ ! -f $ERRFILE ]; then
+	    echo "Deleted $PIDFILE and $ERRFILE"
+	  fi
+	else
+	    echo "Could not delete $PIDFILE and/or $ERRFILE"
+	fi
+	;;
+  *)
+	echo "Usage: $0  {start | stop | restart | hup | debug | status | clean}"
+	exit 1
+	;;
+esac
+
+exit $RETVAL

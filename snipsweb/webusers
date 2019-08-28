@@ -1,0 +1,17 @@
+# webusers for SNIPS
+#
+# Define userlevel from 0 - 4 (0 is hi privelege like 'root')
+#	0 = all commands (new & future ones also)
+#	1 = devicehelp, history, troubleshooting, updates
+#	2 = devicehelp, history, troubleshooting
+#	3 = devicehelp, history
+#	4 = devicehelp
+#
+# See the utility program 'docrypt.pl' to generate the encrypted passwords.
+# 
+
+##   username : encrypted-password : user-level
+#
+#vikas:kdflvdki:0
+#jim:xyasdf:4
+#bob:jd09w8uoajf:3

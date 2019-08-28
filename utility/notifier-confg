@@ -1,0 +1,64 @@
+# $Header: /home/cvsroot/snips/utility/notifier-confg,v 1.1 2001/08/17 02:33:52 vikas Exp $
+#
+# Config file for 'notifier.pl'.
+#
+# Maps people to events (DEVICE:address combinations) for notification. Reads 
+# updates from the 'updates' file maintained by websnips.
+#
+# AUTHOR:
+#	Adrian Close (adrian@aba.net.au)
+# 
+# FORMAT:
+#	Fields separated by spaces, one entry per line.
+#	Paging/email entries are comma separated
+#
+# You can skip the ':varname' if you want. If you skip the event age, it
+# implies zero (no wait time, do as soon as device is down). If event age is
+# set to -1, then that action is only done for events read from stdin by
+# notifier.pl.
+#
+# Age is in MINUTES
+#
+# Event ID		Repeat paging on	Paging destination(s)
+#			the hour?		
+# DEVICE:addr:varname	(0=no, 1=yes)		<to>:<medium>:<min-eventage>
+# 
+# e.g.
+#
+# my.gw.net:192.168.1.1:ICMP-echo	1	bob@notifyme.org:email:5, snips:email:0, 61417600300:page:120
+#
+# This above example sends email to bob after device is down for 5 minutes,
+# sends email to 'snips' right away, and pages 61417600300 after 120 minutes
+###
+
+#
+# Default notification (all events not specifically listed will use this)
+# Notice the email sent to snips-ops with min-age -1 which is for events
+# read from stdin (use with snipslogd).
+#
+default			1			adrian:page:5, mwp:page:60, mattp:page:120, ops@example.org:email:0, snips-ops@example.org:email:-1
+
+# For testing purposes
+JustTesting:203.21.85.14	1	adrian:page
+TESTONLY-Ignore:192.168.1.254	1	adrian@example.org:email
+AnotherTEST:192.168.1.254	1	adrian:page
+
+# Sofres (mini)servers
+sofres-nexus:203.25.255.3	0	adrian:page,mwp:page,mdonald@example.org:email,leachbj@example.org:email
+sofres-miniserver:203.25.255.10	0	adrian:page,mwp:page,mdonald@example.com:email,leachbj@example.org:email
+
+# ISDN Links
+ISDN-StVincent:203.25.254.10	1	61412232761.redrock:page,snips:page
+ISDN-Ocean:203.25.254.14	1	61419311010.telstra:page,snips:page,0413738187.redrock:page
+#ISDN-CPE:203.13.225.195	1	snips:page
+#ISDN-CityOfMelb:203.25.254.22	1	snips:page
+#ISDN-DoSD:203.25.254.38	1	snips:page
+#ISDN-YarraCity:203.25.254.42	1	snips:page
+PPP-Adacel:203.25.254.174	1	61411535163.redrock:page,snips:page
+
+# Co-located clients
+infinet:203.36.26.66		1	61418322122.telstra:page,snips:page
+#connect4:203.25.255.7		1	?
+#CityOfMelb:203.36.26.65	1	?
+equityworld-gw:203.25.255.2	1	61419852628.telstra:page,snips:page
+

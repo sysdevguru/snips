@@ -1,0 +1,212 @@
+##
+## Makefile for CMU SNMP Apps.
+##
+## $Id: Makefile.in,v 1.11 1998/08/06 01:22:58 ryan Exp $
+##
+## @configure_input@
+##
+
+## Generic commands used
+CC 		= @CC@
+MKDIRHIER	= @MKDIRHIER@
+LIBTOOL		= @LIBTOOL@
+PERL		= @PERL@
+INSTALL		= @INSTALL@
+SHELL		= /bin/sh
+
+## Install levels
+INSTALL_EXE	= $(INSTALL) -m 755 
+INSTALL_BIN	= $(INSTALL_EXE) -s
+INSTALL_TXT	= $(INSTALL) -m 644
+
+## Installation directories
+prefix		= @prefix@
+exec_prefix	= @prefix@
+BINDIR		= $(exec_prefix)/bin
+MANDIR		= $(exec_prefix)/man
+MAN1DIR		= $(MANDIR)/man1
+
+## For gmake compilation in alt. directory
+srcdir		= @srcdir@
+VPATH		= @srcdir@
+top_srcdir	= @top_srcdir@
+top_builddir	= .
+
+## Other defaults from autoconf
+CPPFLAGS	= @CPPFLAGS@
+DEFS		= @DEFS@
+INCS		= @INCS@
+LDFLAGS		= @LDFLAGS@
+RUNPATH		= @RUNPATH@
+
+## Put them all together
+INCLUDES	= $(INCS) -I.
+DEFINES		= $(DEFS)
+
+CFLAGS		= @CFLAGS@ $(INCLUDES) $(DEFINES)
+LIBS		= @LIBS@ 
+
+TARGETS	= snmpstatus snmpget snmpwalk snmptranslate \
+	snmpgetnext snmptrap snmptest snmptrapd \
+	snmptrap2 snmpdelta snmpset	
+
+# -----------------------------------------------------------------
+
+foo: devel all
+
+all: $(TARGETS)
+
+# -----------------------------------------------------------------
+
+manpages:
+	$(PERL) make-manpages.pl $(TARGETS)
+
+# Generate manpages using list of manpages in perl script.  That way,
+# see also is always up to date.
+install: all manpages
+	$(MKDIRHIER) $(BINDIR) $(MAN1DIR)
+	@for i in $(TARGETS); do \
+	echo "Installing $$i..."; \
+	$(INSTALL_BIN) $$i $(BINDIR); \
+	$(INSTALL_TXT) $$i.1 $(MAN1DIR); \
+	done
+
+# -----------------------------------------------------------------
+
+clean:
+	-rm -f *.o $(TARGETS) *.1 *.exe
+
+distclean realclean: clean
+	-rm -f config.h Makefile config.cache config.log config.status
+
+# -----------------------------------------------------------------
+
+snmpget:    snmpget.o version.o
+	$(LIBTOOL) $(CC) $(CFLAGS) -o $@ snmpget.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+snmptranslate:    snmptranslate.o version.o
+	$(LIBTOOL) $(CC) $(CFLAGS) -o $@ snmptranslate.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+snmpgetnext:    snmpgetnext.o version.o
+	$(LIBTOOL) $(CC) $(CFLAGS) -o $@ snmpgetnext.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+snmpwalk:    snmpwalk.o version.o
+	$(LIBTOOL) $(CC) $(CFLAGS) -o $@ snmpwalk.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+snmpstatus:    snmpstatus.o version.o
+	$(LIBTOOL) $(CC) $(CFLAGS) -o $@ snmpstatus.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+snmptest:    snmptest.o version.o
+	$(LIBTOOL) $(CC) $(CFLAGS) -o $@ snmptest.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+snmpset:    snmpset.o version.o
+	$(LIBTOOL) $(CC) $(CFLAGS) -o $@ snmpset.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+snmptrap: snmptrap.o version.o uptime.o
+	$(LIBTOOL) $(CC) $(CFLAGS) -o $@ snmptrap.o uptime.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+snmptrapd: snmptrapd.o version.o
+	$(LIBTOOL) $(CC) $(CFLAGS) -o $@ snmptrapd.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+snmptrap2: snmptrap2.o version.o
+	$(LIBTOOL) $(CC) $(CFLAGS) -o $@ snmptrap2.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+snmpdelta: snmpdelta.o version.o
+	$(LIBTOOL) $(CC) $(CFLAGS) -o $@ snmpdelta.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+##### PURIFY #####
+
+purify: pv.snmpget pv.snmpgetnext pv.snmpwalk pv.snmpstatus \
+	pv.snmptest pv.snmpset pv.snmptrapd pv.snmpdelta pv.snmptrap2 \
+	pv.snmptrap
+
+pv.snmpget:    snmpget.o version.o
+	purify $(CC) $(CFLAGS) -o $@ snmpget.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+pv.snmpgetnext:    snmpgetnext.o version.o
+	purify $(CC) $(CFLAGS) -o $@ snmpgetnext.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+pv.snmpwalk:    snmpwalk.o version.o
+	purify $(CC) $(CFLAGS) -o $@ snmpwalk.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+pv.snmpstatus:    snmpstatus.o version.o
+	purify $(CC) $(CFLAGS) -o $@ snmpstatus.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+pv.snmptest:    snmptest.o version.o
+	purify $(CC) $(CFLAGS) -o $@ snmptest.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+pv.snmpset:    snmpset.o version.o
+	purify $(CC) $(CFLAGS) -o $@ snmpset.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+pv.snmptrap: snmptrap.o version.o
+	purify $(CC) $(CFLAGS) -o $@ snmptrap.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+pv.snmptrapd: snmptrapd.o version.o
+	purify $(CC) $(CFLAGS) -o $@ snmptrapd.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+pv.snmptrap2: snmptrap2.o version.o
+	purify $(CC) $(CFLAGS) -o $@ snmptrap2.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+pv.snmpdelta: snmpdelta.o version.o
+	purify $(CC) $(CFLAGS) -o $@ snmpdelta.o version.o $(RUNPATH) $(LDFLAGS) $(LIBS)
+
+##### VERSION CONTROL #####
+
+version.o: version.c
+	$(CC) $(CFLAGS) -DCMU_SNMPAPPS_VERSION="\"`head -1 VERSION`\"" -c version.c -o version.o 
+
+devel:
+	@-rm -f version.o
+	@-ng-next-version
+	@echo "New version: `cat VERSION`"
+
+minor:
+	@-rm -f version.o
+	@-ng-next-version -m
+	@echo "New version: `cat VERSION`"
+
+major:
+	@-rm -f version.o
+	@-ng-next-version -M
+	@echo "New version: `cat VERSION`"
+
+## Exporting sources
+##
+
+VER=`cat VERSION | sed -e 's/d[0-9]*//'`
+TARFILE=/usr/tmp/cmu-snmpapps-$(VER).tar.gz
+TMPDIR=/usr/tmp/snmpapps.${USER}
+export: clean manpages
+	$(MKDIRHIER) $(TMPDIR)/snmpapps
+	echo "Creating snmpapps dir"
+	(cd $(srcdir); tar -cf - . | (cd $(TMPDIR)/snmpapps; tar -xf -))
+	(cd $(srcdir); cp VERSION $(TMPDIR))
+	(cd $(TMPDIR); gtar -zcvhf ${TARFILE} -X snmpapps/exclude-in-tar snmpapps)
+	rm -rf $(TMPDIR)
+	md5 ${TARFILE} > ${TARFILE}.md5
+	pgp -sb ${TARFILE} -u netdev
+
+#####
+
+setup: configure Makefile config.h
+
+## When to regenerate the configure script
+##
+configure: configure.in
+	autoconf
+
+## When to rerun configure
+##
+config.status: $(srcdir)/configure
+	./config.status --recheck
+
+## When to regenerate the .in files
+##
+config.h.in: $(srcdir)/configure
+	autoheader
+
+config.h: $(srcdir)/config.h.in config.status
+	./config.status
+
+Makefile: $(srcdir)/Makefile.in config.status
+	./config.status

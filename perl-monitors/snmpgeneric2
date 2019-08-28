@@ -1,0 +1,340 @@
+#!/usr/local/bin/perl 
+##
+# $Header: /home/cvsroot/snips/perl-monitors/snmpgeneric2,v 1.1 2008/05/08 14:29:18 tvroon Exp $
+#
+#  snmpgeneric2 - perl monitor for generic SNMP variables.
+# 	Directly monitors SNMP variables from the hosts listed.
+#	Can query a single variable, or walk a tree and total up
+#	the results, based on a perl regex that gets evaluated for
+#	each variable returned.
+#
+#  AUTHOR:	 Ed Landa, elanda@comstar.net, May 1999
+#
+#  MODIFIED: Rob Lister, robl@linx.net 2007
+#  This version of snmpgeneric has been modified to use modern 
+#  snmpget tools instead of the ancient cmu-snmp tools that 
+#  are included with SNIPS. Configuration is compatible with snmpgeneric,
+#  but a few new options have been added. The 'snmpwalk' functionality
+#  has not been tested in this release and likely needs more work.
+#
+#####################
+#
+# DESCRIPTION HERE
+#
+# Supplemental Packages Required:
+#
+# snmpget
+#
+# Files used:
+#
+# Snips event elements used:
+#   sender                     "snmpgeneric"
+#   device
+#    name                      the SNMP unit's name
+#    addr                      the SNMP unit's IP address
+#   var                       
+#    name                      dependant on the config file
+#    threshold                 as read from the config file
+#    units                     always "snmp"
+#
+## 
+##
+
+use strict;
+use vars qw ( $snipsroot $debug $etcdir $bindir $snmpget $snmpwalk $mibfile
+	      $numtries $varunits $SNMPVER @snmpver
+	      @deviceip @oid @community @comp @wlevel @elevel @clevel
+	    );
+
+BEGIN {
+  $snipsroot = "/usr/local/snips"  unless $snipsroot;	# SET_THIS
+  push (@INC, "$snipsroot/etc"); push (@INC, "$snipsroot/bin");
+  require "snipsperl.conf" ;		# local customizations
+}
+
+use SNIPS;
+
+############################
+## Variables customization #  overrides values in the snipslib.pl library
+############################
+$etcdir  = "$snipsroot/etc"  unless $etcdir;	# location of config file
+$bindir  = "$snipsroot/bin"  unless $bindir;
+
+# $snmpget  = "$bindir/snmpget" unless $snmpget ;	# location of snmpget
+# $snmpwalk = "$bindir/snmpwalk" unless $snmpwalk;# location of snmpwalk
+# $mibfile = "$etcdir/mib-v2.txt" unless $mibfile;# location of MIB file SET_THIS
+
+$ENV{"MIBFILE"}= $mibfile ;
+$ENV{"MIBFILE_v2"}= $mibfile ;
+
+$numtries = 2;   # number of times to try and connect before failing
+$debug = 0;				# set to 1 for debugging output
+$varunits="snmp" ;			# the var.units field in EVENT struct
+$s_pollinterval= 60*5;       		# Seconds to sleep between tries.
+
+$SNMPVER="2c";  # default SNMP version/opts
+
+##########################
+
+-x $snmpget || die("Could not find executable $snmpget, exiting");
+-x $snmpwalk || die("Could not find executable $snmpwalk, exiting");
+
+##
+# Read the config file. Use '\t' as a separator for 'item'
+sub readconf  {
+  my $lineno = 0;
+  my $count = 0;
+  my $event = new_event();
+  my $buffer = "BOGUS";
+
+  if ($debug == 0 && $libdebug > 0) {
+    ++$debug ; --$libdebug;
+  }
+  $s_sender = 'snmp2' if ($s_sender eq "");
+
+  open(CONFIG,"<$s_configfile")||die("Couldn't find $s_configfile, exiting");
+  my $datafd = open_datafile($s_datafile, "w");
+  # alter_event($event, $s_sender, undef, undef, undef, undef, $varunits);
+  undef @deviceip; undef @oid; undef @comp ;
+  undef @wlevel; undef @elevel; undef @clevel;
+
+  while(<CONFIG>)
+  {
+    ++$lineno;
+    chomp;
+    if(/^\s*\#/) {next;}   	# skip comments
+    if(/^\s*$/) {next;}		# skip blank lines
+
+    if (/^(sleepinterval)\s+(\d+)\s*$/i || /^(pollinterval)\s+(\d+)\s*$/i) {
+      $s_pollinterval = $2;
+      next;
+    }
+    
+    if (/^\s*RRDTOOL\s+ON/i)  { $SNIPS::dorrd = 1; next; }
+    if (/^\s*RRDTOOL\s+OFF/i) { $SNIPS::dorrd = 0; next; }
+
+    if (/\s*(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s*$/)
+    {   # this is an snmpget line
+      ++$count;
+      my ($host, $snmpver) = split(/\//, $1, 2);
+      my ($ip, $port) = split(/:/, $2, 2);
+
+	if ($snmpver) {  
+		$snmpver[$count] = $snmpver; 
+		} else {
+		$snmpver[$count] = $SNMPVER;
+	   	}
+
+      ($deviceip[$count] , $oid[$count] , $community[$count]) = ($ip, $3, $5);
+      ($wlevel[$count] , $elevel[$count] , $clevel[$count]) = ($6, $7, $8);
+       $comp[$count] = $9;
+      # alter_event($event, undef, $1, $ip, undef, $4, undef);
+      $buffer = $4;
+      alter_event($event, $s_sender, $host, $ip, undef, $buffer, $varunits);
+      write_event($datafd, $event);
+      next;
+    }
+    if (/\s*(\S+)\s+(\S+)\s+(\+\S+)\s+(\S+)\s+(\S+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s*$/)
+      #                      ^^                                                  ^^^^^^
+    {      # We're checking for a snmpwalk config line
+      ++$count;
+      my ($host, $snmpver) = split(/\//, $1, 2);
+      my ($ip, $port) = split(/:/, $2, 2);
+      ($deviceip[$count] , $oid[$count] , $community[$count]) = ($ip, $3, $5);
+      ($wlevel[$count] , $elevel[$count] , $clevel[$count]) = ($6, $7, $8);
+      $comp[$count] = $9;	# comparison regex
+      # alter_event($event, undef, $1, $ip, undef, $4, undef);
+      $buffer = $4;
+      alter_event($event, $s_sender, $host, $ip, undef, $buffer, $varunits);
+      write_event($datafd, $event);
+      next;
+    }
+    print "Ignoring illegal line: $_\n";
+    
+  }		# end while(CONFIG)
+  
+  close(CONFIG);
+  if ( $count < 1) { die("Nothing to monitor in $s_configfile, exiting"); }
+  if ($debug) {
+    print "Devices to monitor are: " ;
+    for my $i (1..$count) { print "\t$deviceip[$i]  $oid[$i]\n"; }
+  }
+  close_datafile($datafd);
+
+}	# end: sub(readconf)
+  
+  
+# Return   status, value, threshold, maxseverity
+sub dotest {
+	my ($event, $i) = @_;		# $i starts from 1, not 0
+	my $value = 0;
+	my $cmd = "";
+
+	# Check if a port number is attached to $router:$port
+	my ($routerip, $port) = split(/:/, $deviceip[$i], 2);
+	my $myoid = $oid[$i];
+
+	if ($debug > 2) { print "Checking $routerip\n"; }
+
+	# If the OID starts with a plus then we walk the tree and add the values
+	if ($myoid =~ /^\+/)
+	{
+		$myoid =~ s/^\+(.*)$/\1/;	# remove the leading +
+		if ($port) { $cmd = "$snmpwalk -p $port $routerip $community[$i] $myoid";}
+		else { $cmd = "$snmpwalk $routerip $community[$i] $myoid"; }
+
+		open (WALK, "$cmd |") || die "Could not run \"$cmd\"\n";
+		while (<WALK>)
+		{
+			chomp;
+			my $line=$_;
+			print "$line\n" if ($debug > 1);
+			$line =~ s/^.*INTEGER:\s*(.*)$/\1/; # we only want the variable
+			if ($line =~ /\(.*\)/)	# if MIB matched, only get the numeric
+			{
+				$line =~ s/^.*\(\s*(\d+)\s*\).*$/\1/; # chop off text descrip if there
+			}
+			print "LINE=$line\n" if ($debug > 1);
+			my $comp = $comp[$i];
+			$comp =~ s/\*/$line/g;
+			my $result = eval $comp;		# evaluate the string
+			print "\tregexp=$comp\n\tresult=$result\n" if ($debug > 1);
+			$value += $result;
+		}
+		close(WALK);
+		print "Total value=$value\n" if ($debug > 1);
+	}
+	else	# OID does not start with a leading +
+	{
+		#if ($port) { $cmd = "$snmpget -p $port $routerip $community[$i] $myoid";}
+		#else { $cmd = "$snmpget $routerip $community[$i] $myoid"; }
+
+		if ($port) {$cmd = "$snmpget -v$snmpver[$i] -Of -c $community[$i] $routerip:$port $myoid"; }
+		else { $cmd = "$snmpget -v$snmpver[$i] -Of -c $community[$i] $routerip $myoid"; }
+
+		print "cmd=$cmd\n" if $debug;
+
+		my $line="";
+		my $tries = $numtries;
+		my $comp = $comp[$i];
+
+		while (($tries) && (! (($line =~ /(INTEGER|Counter32|Gauge|Counter|STRING)/i)||($line =~ /Timeticks/)) ) ) 
+
+		{
+
+                if ($debug >0) {
+                        print "Try number $tries of $numtries:\n";
+			print "   -> cmd=$cmd\n";
+                        }
+
+			$line = `$cmd`;
+			chomp $line;
+			print "   <- line=$line" if ($debug > 1);
+			--$tries;
+
+                if ($line =~ /(no such instance|no such variable)/i) {
+                        { print "   *** ERR: $cmd returned:\n$line\n\n" };
+			if ($debug >1) { sleep 3 };
+                }
+
+                next if ($line =~ /no such instance|no such variable/i);
+		next unless ($line);
+
+		}
+
+
+		if ($tries)	{ # did not timeout
+			$line =~ s/^.*INTEGER:\s*(.*)$/\1/; # we only want the variable
+			$line =~ s/^.*Gauge32:\s*(.*)$/\1/;
+			$line =~ s/^.*Gauge:\s*(.*)$/\1/;
+			$line =~ s/^.*Counter:\s*(.*)$/\1/;
+			$line =~ s/^.*STRING:\s*(.*)$/\1/;
+			$line =~ s/\"//g;
+			$line =~ s/\ //g;
+			if ($line =~ /\(.*\)/)	#  if MIB matched, only get the numeric
+			{
+				$line =~ s/^.*\(\s*(\d+)\s*\).*$/\1/; # chop off text descrip if there
+			} else {
+			$value = "ERR";
+			}
+        
+
+				if ($comp =~ /^pcc/) {
+				
+				$value=$line;
+				$varunits="procs";
+				
+				# increment 1 to 2 so that thresholds work correctly:
+				
+					if ($value == 1) {
+						$value++;
+					}
+
+				} elsif ($comp =~ /^load100/i) {
+					
+				$varunits="loadavg";
+				$value = $line / 100;
+				
+			        } elsif ($comp =~ /Disk4096/i) {
+			        
+				$varunits="MB";
+				$value = $line * 4096 / 1024 / 1024;
+
+			        } elsif ($comp =~ /Disk1024/i) {
+			        	
+				$varunits="MB";
+				$value = $line * 1024 / 1024 / 1024;
+
+				} elsif ($comp =~ /^bool:/i) {
+
+                                # increment 1 to 2 so that thresholds work correctly:
+				 	
+					$value=$line;
+                                        if ($value == 1) {
+                                                $value++;
+                                        }
+
+				(undef,$varunits) = split(/:/,$comp);
+
+				} else 	{
+
+					$value=$line;
+					
+					}
+
+
+			}
+
+				print "\n   <- value=$value\n" if ($debug > 0);
+			}
+
+			$value = 0 if ($value < 0);		# negative status to be ignored
+
+
+			if ($value ne 'ERR') {
+
+				if ($debug >2 ) {print "   * calc_status: $value, $wlevel[$i], $elevel[$i], $clevel[$i])\n"; }
+				my ($status, $threshold, $severity) = 
+				calc_status($value, $wlevel[$i], $elevel[$i], $clevel[$i]);
+				# status, value, thres, maxseverity
+				if ($debug > 1) { print "   << returning status => $status value=> $value threshold=> $threshold severity=> $severity\n"; }
+				#  note to self: if it segfaults here, check permissions of rrd file for this var.
+				return ("$status", "$value", "$threshold", "$severity");
+
+			} else {
+
+				if ($debug >0) { print "   << returning UNDEF (value=$value)\n\n"; }
+				return undef;
+
+
+			}
+
+
+		}		# end &dotest()
+
+###
+### Main program:
+###
+
+&snips_main(\&readconf, undef, \&dotest);
+

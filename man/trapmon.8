@@ -1,0 +1,102 @@
+.\" $Header: /home/cvsroot/snips/man/trapmon.8,v 1.0 2001/07/08 22:31:48 vikas Exp $
+.\"
+.TH TRAPMON 8 "June 2001"
+.SH NAME
+trapmon \- display SNMP traps in SNIPS format.
+.SH USAGE
+.B trapmon [\-d] [\-P] [\-S] [\-p \fIport\fR] [\s]
+.SH OPTIONS
+.TP
+.B \-d
+Debug mode, and dump each SNMP trap.
+.TP
+.B \-P
+Print a summary of each trap to stdout.
+.TP
+.B \-S
+Log a one-line summary to
+.BR syslogd (8)
+using the same format as the \-P switch.
+.TP 8
+.B \-p
+.I port
+Use the specified port number to listen for SNMP traps instead of the default 
+port 162.
+.TP
+.B \-s
+SNIPS mode- convert traps to SNIPS format events and write to a snips datafile.
+.SH DESCRIPTION
+.LP
+.B trapmon
+was developed specifically for use with the
+.BR SNIPS
+network monitoring system- the
+.I \-s
+switch enables reporting designed for processing by \fI SNIPS\fR.
+.PP
+.B trapmon
+processes traps asynchronously using
+.BR select (2).
+As each trap is received, it is written to the SNIPS datafile (or to stdout
+depending on the mode). An EVENT structure is appended to the output datafile 
+for each trap recieved, and then deleted after TIME_TO_LIVE minutes
+(typically 30 minutes).
+This timeout feature ensures that trap datafile does not grow without bounds.
+.LP
+Each trap type is pre-assigned a severity level (these are listed in
+the
+.I trapmon.h
+include file)\- thus a
+.I Link Down
+trap will be assigned a SNIPS severity level of ERROR while a
+.I Cold Start
+trap will be assigned a severity level of WARNING.
+.LP
+.B trapmon
+binds to the SNMP port, so it must be executed by the superuser.
+.LP
+For facilitating 
+.I enterprise
+specific traps, trapmon appends the value in the 
+.I specific_type
+field of the trap packet to the word 'Enterprise' in the 
+.I variable 
+field of the EVENT structure for SNIPS.
+.SH CAVEATS
+.TP 1)
+trapmon needs to run as superuesr since it listens on a priveleged port (162) 
+for incoming traps.
+.TP 2)
+If the output file for
+.B trapmon
+is on an NFS mounted filesystem, then the process will not be able to create
+the output file unless it is in a world-writable directory. This is because
+NFS will not honor superuser privileges on the NFS filesystem.
+\fI Thus, the output file must exist on the local machine and not on an NFS
+mounted partition.\fR
+.TP 3)
+The severity level of each trap is defined during compile time in the
+.I trapmon.h
+include file. To change the severity level, the program has to be recompiled.
+.RS
+.ta \w'#define'u +\w'fsid_t\0\0'u +\w'f_spare[7]\0\0'u
+.sp .5
+.nf
+   "Cold_Start" 	E_WARNING
+   "Warm_Start"		E_WARNING
+   "Link_Down"		E_ERROR
+   "Link_Up"		E_ERROR
+   "Auth_Failure"	E_WARNING
+   "EGP_Peer_Loss"	E_CRITICAL
+   "Enterprise"		E_WARNING
+   "Unknown_Type"	E_WARNING
+.fi
+.RE
+.LP
+The 
+.I enterprise
+specific traps are not converted into text- only the number representing the
+.I specific_type
+(from the RFC trap PDU specification) is displayed.
+.SH AUTHOR
+Modified from CMU-SNMP's snmptrapd by vikas@navya.com

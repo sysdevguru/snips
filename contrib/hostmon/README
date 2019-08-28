@@ -1,0 +1,43 @@
+WHAT IS IT?
+-----------
+Hostmond is a Perl script that periodically collects infomation about a host
+and dumps it to a file that can be collected by a variety of means by a
+monitoring system.
+Lines of the output file (/tmp/<hostname>.hostmon) look like:
+  <Interface> <value> <units> <Sub-interface>
+  DFspace_avail 308 MB /usr
+
+
+FILES
+-----
+
+Hostmon.pm
+  Module for our monitoring system that grabs hostmond data in parallel
+  (using udp) from all monitor hosts.  Not usable out of the box, but a
+  useful example.
+hostmond
+  Our replacement for "hostmon-client".  All it does is create the datafile
+  (/tmp/<hostname>.hostmon).  This is Linux specific.  If you want the
+  modularity of the Nocol hostmon-client then you are probably better off
+  changing the Nocol version to act like hostmond.
+services
+  Neccessary services entries to make (x)inetd examples work.
+inetd.conf
+  Example for inetd setup
+xinetd.conf
+  Example for xinetd setup
+udpcat
+  Expects to be called from (x)inetd.  Dumps file specified on command line
+  to UDP socket attached to STDIN.
+udpcli
+  Connects to a remote host on specified port, sends "GIMME IT!!" and
+  displays whatever it gets back.  If the included (x)inetd setups are used
+  in conjunction with hostmond this will produce the contents of
+  /tmp/<hostname>.hostmon.
+
+
+COPYRIGHT
+---------
+All files are (C) Copyright 1998,1999 MINT and licensed under the GNU
+General Public License (see COPYING) unless otherwise noted in their
+comments.

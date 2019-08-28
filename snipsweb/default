@@ -1,0 +1,31 @@
+<h3>DEFAULT Help</h3>
+
+<b>Delete and replace this file (under $snipsroot/device-help/). </b>
+
+This is a 'default' help file for SNIPS devices.
+It is supposed to be very generic in nature as a fallback for all devices.
+
+You should create specific files under /snips/device-help with names such as:
+
+<pre>
+	yale-gw:192.12.1.2	# devicename : deviceaddr
+	yale-gw:default		# devicename : default
+	default:192.12.1.2	# default : deviceaddr
+	default:ICMP-ping	# default : variable
+	default:ippingmon	# default : sender
+	default
+</pre>
+
+The search order for a helpfile matching an event is:
+<pre>
+	<devicename> : <deviceaddr>
+	<devicename> : <variable>
+	<devicename> : <sender>
+	default
+</pre>
+where any of these can be the 'default' keyword. The helpfile in the
+directory which best matches the event will be returned.
+
+You can put html tags in this file such as <a href="http://www">
+click here</a> for our web device.
+

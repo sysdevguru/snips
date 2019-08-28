@@ -1,0 +1,77 @@
+.\"$Header: /home/cvsroot/snips/tpmon/tptest.1,v 1.0 2001/07/09 04:00:25 vikas Exp $"
+.TH TPTEST 1 "June 9, 1992"
+.SH NAME
+\fBtptest\fR \- testing program for \fBtpmon.c\fR C module
+.SH SYNOPSIS
+\fBtp\fR [ \fB-v\fR ] [ \fB-b \fInumbytes\fR ]
+[ \fB-s \fIblock size\fR ]
+[ \fB-t \fIseconds\fR ]
+.if n .ti +0.25i
+[ \fB-p \fIfill pattern\fR ] [ \fB-P \fIport number\fR ]
+\fBhost\fR [ \fBhost ...\fR ]
+.SH DESCRIPTION
+\fBtptest\fR is a demonstration program to illustrate the usage of the
+\fBthroughput()\fR function in \fBtpmon.c\fR so that you can use the
+\fBthroughput()\fR function in your own programs, although I can't imagine
+why you would want to.
+.PP
+The program measures throughput for each host listed on the command line on
+the network by flooding the discard TCP port (usually port 9) with data.
+It keeps track of how much data it wrote and how long it took to write
+this data and calculates the throughput in bits per second.
+.PP
+The results may vary quite a bit depending on system load, so the
+throughput figure reported by the program should not be regarded as being too
+reliable.
+.SH OPTIONS
+.TP 16
+.B \-v
+selects verbose output mode
+.TP
+.BI "\-b " "numbytes"
+Number of bytes to send
+.TP
+.BI "\-s " "block size"
+Attempt to send blocks that are \fIblock size\fR bytes long.  Default is 1024.
+Note that in order for the \fB-t\fR option to work properly, non-blocking
+I/O has to be used, so that while the program \fItries\fR to send \fIblock
+size\fR bytes with every call to \fBwrite(2)\fR, most of the time the actual
+number of bytes written will be less than that.  Thus, changing the value
+default 1024) probably will not accomplish a whole lot.  The parameter does
+determine the size of the block used in pattern filling, see \fB-p\fR option
+below.
+.TP
+.BI "\-t " seconds
+send data for
+.I seconds
+seconds.  Note that this is probably not going to be accurate in any way
+because it uses
+.B alarm(3)
+to interrupt the sending after
+.I seconds
+seconds.
+.TP
+.BI "\-p " "fill pattern"
+repeat
+.I "fill pattern"
+to fill up the data block.  For example, if
+.I "block size"
+is 16 and
+.I "fill pattern"
+is
+.I foobar
+then the data block will be
+.IB "foobarfoobarfoob" "."
+.TP
+.BI "\-P " "port number"
+send the data to socket port
+.IB "port number" "."
+.SH BUGS
+Ideally if you give use both the \fB-b\fR and the \fB-t\fR options at
+the same time, it should stop the test after \fInumbytes\fR bytes
+have been sent, or \fIseconds\fR seconds have elapsed, whichever comes
+first.  This may be implemented later, but currently if you specify
+both options at once, the \fB-b\fR option is ignored.
+.SH AUTHOR
+.nf
+S. Spencer Sun (spencer@phoenix.princeton.edu, spencer@jvnc.net)

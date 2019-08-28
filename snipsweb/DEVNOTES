@@ -1,0 +1,6 @@
+DEVNOTES for snipsweb
+
+1. genweb.cgi 'read_row_data()' reads in the entire file (and in CGI
+   mode, all the data files) to permit sorting. This causes memory
+   bloat.
+

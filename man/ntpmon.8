@@ -1,0 +1,68 @@
+.\"$Header: /home/cvsroot/snips/man/ntpmon.8,v 1.0 2001/07/08 22:31:48 vikas Exp $"
+.\"
+.TH NTPMON 8 "June 2001"
+.SH NAME
+ntpmon \- Network Time Protocol Monitor
+.SH SYNOPSIS
+.B ntpmon
+[
+.B \-a
+] [
+.B \-d
+] [
+.B \-o
+.I output-file
+] [
+.I config-file
+] [
+.B \-x
+]
+.SH DESCRIPTION
+.LP
+.B ntpmon
+is part of the SNIPS network monitoring package, used for testing the NTP
+stratum of a list of hosts.
+The defacto program for running NTP on Unix servers is 
+.I xntpd
+(from University of Delaware).
+.PP
+The program reads in a list of devices to query from a config file at startup
+and then does a NTP query from the hosts periodically. If the NTP clock
+of the remote host is at a stratum higher than the thresholds specified
+in the config file, the status is assumed to be down and the severity is
+escalaated.
+.LP
+The query type is Stratum. The servers are queried every POLLINTERVAL 
+specified in the config file. Note that the highest possible NTP stratum is 16.
+In case a hostname cannot be resolved, the stratum is set to 255 to 
+indicate a hostname error.
+.\"
+.SH OPTIONS
+.TP 20
+.B \-a
+autoreload the configuration file if it is updated since last reload and if
+it is at least 1 minute old.
+.TP
+.B \-d
+selects verbose debugging output mode. Specify multiple times to increase the
+debug level.
+.TP
+.BI "\-o" " output file"
+Name of the file to which to write the output.  This file is 
+.I not
+in human-readable format, and is intended to be processed by the 
+.BR snipstv (1)
+display program.
+.TP
+.B \-x
+extension that is added to the program name to create the config file name
+and output file name.
+.TP
+.I config-file
+This file lists the hosts to be queried for the nameserver. A sample config
+file is provided with the software.
+.\"------------------------------------
+.SH CAVEATS
+The program uses UDP for querying the ntp server.
+This may be unreliable if  the network is heavily congested.
+Thus the error level may be erroneously be shown as CRITICAL.
